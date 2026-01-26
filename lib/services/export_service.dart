@@ -77,7 +77,12 @@ class ExportService {
   }
 
   Future<String> generateInvoicePDF(Invoice invoice, {Branch? branch, String? cashierName, String printerType = 'THERMAL_80'}) async {
-    final pdf = pw.Document();
+    final pdf = pw.Document(
+      title: 'Invoice_${invoice.invoiceNumber}',
+      author: branch?.name ?? 'Automata POS',
+      creator: 'Automata POS',
+      subject: 'Invoice #${invoice.invoiceNumber}',
+    );
 
     // Determine Page Format
     PdfPageFormat pageFormat;

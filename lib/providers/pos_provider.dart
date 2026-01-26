@@ -76,6 +76,19 @@ class POSProvider extends ChangeNotifier {
     // No notify here to avoid double notify during initial load, usually fine though
   }
 
+  Future<Invoice?> getInvoiceById(int id) async {
+    final db = await _dbHelper.database;
+    final results = await db.query('invoices', where: 'id = ?', whereArgs: [id]);
+    
+    if (results.isEmpty) return null;
+    
+    final map = results.first;
+    final itemMaps = await db.query('invoice_items', where: 'invoice_id = ?', whereArgs: [id]);
+    final items = itemMaps.map((im) => InvoiceItem.fromMap(im)).toList();
+    
+    return Invoice.fromMap(map, items: items);
+  }
+
   Future<void> searchInvoices(String query) async {
     if (query.trim().isEmpty) {
       await loadRecentInvoices();
@@ -279,15 +292,18 @@ class POSProvider extends ChangeNotifier {
     return "$prefix-$datePart-$timePart";
   }
   
-  Future<void> createInvoice(Invoice invoice) async {
+  Future<int> createInvoice(Invoice invoice) async {
     if (invoice.branchId == null) {
        debugPrint('WARNING: Attempting to create invoice without branchId. This is required for sync.');
-       // Optionally throw an error or handle it as per requirement
     }
 
     final db = await _dbHelper.database;
+    int newInvoiceId = -1;
+    
     await db.transaction((txn) async {
       final invoiceId = await txn.insert('invoices', invoice.toMap());
+      newInvoiceId = invoiceId;
+      
       for (var item in invoice.items) {
         await txn.insert('invoice_items', {
           ...item.toMap(),
@@ -314,7 +330,7 @@ class POSProvider extends ChangeNotifier {
 
       // Handle Membership Activation
       if (invoice.type == InvoiceType.membership && invoice.customerId != null) {
-         // ... (existing membership logic remains same) ...
+        // ... (existing membership logic remains same) ...
         final membershipItem = invoice.items.firstWhere((i) => i.itemType == 'MEMBERSHIP');
         final planId = membershipItem.itemId;
         
@@ -355,7 +371,9 @@ class POSProvider extends ChangeNotifier {
       }
 
     });
+    
     await loadInitialData();
+    return newInvoiceId;
   }
 
   Future<void> updateInvoice(Invoice invoice) async {

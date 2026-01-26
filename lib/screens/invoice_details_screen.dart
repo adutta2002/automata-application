@@ -12,18 +12,96 @@ import 'package:pdf/pdf.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import '../providers/tab_provider.dart';
+import 'package:file_picker/file_picker.dart';
+import 'invoices_screen.dart';
 import 'create_invoices/service_invoice_screen.dart';
 import 'create_invoices/product_invoice_screen.dart';
 import 'create_invoices/advance_invoice_screen.dart';
 import 'create_invoices/membership_invoice_screen.dart';
 
-class InvoiceDetailsScreen extends StatelessWidget {
-  final Invoice invoice;
+class InvoiceDetailsScreen extends StatefulWidget {
+  final int? invoiceId;
+  final Invoice? invoice;
 
-  const InvoiceDetailsScreen({super.key, required this.invoice});
+  const InvoiceDetailsScreen({super.key, this.invoiceId, this.invoice});
+
+  @override
+  State<InvoiceDetailsScreen> createState() => _InvoiceDetailsScreenState();
+}
+
+class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
+  Invoice? _invoice;
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInvoice();
+  }
+
+  Future<void> _loadInvoice() async {
+    if (widget.invoice != null) {
+      if (mounted) {
+        setState(() {
+          _invoice = widget.invoice;
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
+    if (widget.invoiceId != null) {
+      try {
+        // Defer to next frame to allow context access if needed, though initState is usually fine for read
+        // But context.read is safe here.
+        final inv = await context.read<POSProvider>().getInvoiceById(widget.invoiceId!);
+        if (mounted) {
+          setState(() {
+            _invoice = inv;
+            _isLoading = false;
+            if (inv == null) {
+              _error = "Invoice not found";
+            }
+          });
+        }
+      } catch (e) {
+        if (mounted) setState(() => _error = e.toString());
+      }
+    } else {
+        if (mounted) {
+             setState(() {
+                _error = "No Invoice ID provided";
+                _isLoading = false; 
+             });
+        }
+    }
+  }
+
+  Invoice get invoice => _invoice!;
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_error != null || _invoice == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Error')),
+        body: Center(child: Text(_error ?? 'Invoice not found')),
+      );
+    }
+
+    // Wrap loading of Customer with a safe check? 
+    // The previous code assumed customer existed or used fallback.
+    // context.watch is fine here.
+    return _buildContent(context);
+  }
+
+  Widget _buildContent(BuildContext context) {
     final customer = context.watch<POSProvider>().customers.firstWhere(
       (c) => c.id == invoice.customerId,
       orElse: () => Customer(name: 'Walk-in Customer', phone: 'N/A', email: '', address: '', createdAt: DateTime.now()),
@@ -54,10 +132,25 @@ class InvoiceDetailsScreen extends StatelessWidget {
           const SizedBox(width: 12),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8.0),
-            child: ElevatedButton.icon(
-              onPressed: () => _handlePrint(context),
+            child: OutlinedButton.icon(
+              onPressed: () => _handlePrint(context), // Keep Print separate
               icon: const Icon(Icons.print, size: 18),
-              label: const Text('Print / Download'),
+              label: const Text('Print'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.primaryColor,
+                side: BorderSide(color: AppTheme.primaryColor.withOpacity(0.5)),
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: ElevatedButton.icon(
+              onPressed: () => _handleDownload(context), // New Download Handler
+              icon: const Icon(Icons.download, size: 18),
+              label: const Text('Download PDF'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryColor,
                 foregroundColor: Colors.white,
@@ -97,7 +190,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
               flex: 3,
               child: Column(
                 children: [
-                  Expanded(child: _buildItemsCard()), // Make items card take full height
+                   Expanded(child: _buildItemsCard()), 
                 ],
               ),
             ),
@@ -547,6 +640,8 @@ class InvoiceDetailsScreen extends StatelessWidget {
                   allowPrinting: true,
                   initialPageFormat: printerType == 'A4' ? PdfPageFormat.a4 : PdfPageFormat.roll80,
                   maxPageWidth: printerType == 'A4' ? 700 : 350,
+                  // Ensure safe filename with .pdf
+                  pdfFileName: 'Invoice_${invoice.invoiceNumber.replaceAll(RegExp(r'[^a-zA-Z0-9-_]'), '_')}.pdf',
                   pdfPreviewPageDecoration: BoxDecoration(
                     color: Colors.white,
                     boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: const Offset(2, 2))],
@@ -578,8 +673,78 @@ class InvoiceDetailsScreen extends StatelessWidget {
         );
         return File(path).readAsBytes();
       },
-      name: 'Invoice_${invoice.invoiceNumber}',
+      // Sanitize: replace any non-alphanumeric/dash/underscore with underscore
+      // Remove .pdf extension here, let the driver handle it.
+      name: 'Invoice_${invoice.invoiceNumber.replaceAll(RegExp(r'[^a-zA-Z0-9-_]'), '_')}',
     );
+
+    // Auto-redirect to Invoices List after print dialog closes
+    if (mounted) _redirectToList();
+  }
+
+  void _handleDownload(BuildContext context) async {
+    final exportService = ExportService();
+    final provider = context.read<POSProvider>();
+    final branch = provider.getBranchById(invoice.branchId);
+    final printerType = context.read<SettingsProvider>().printerType;
+    final cashierName = context.read<AuthProvider>().currentUser?.fullName;
+
+    try {
+      // 1. Generate PDF Bytes
+      final path = await exportService.generateInvoicePDF(
+        invoice,
+        branch: branch,
+        cashierName: cashierName,
+        printerType: printerType,
+      );
+      final bytes = await File(path).readAsBytes();
+
+      // 2. Open Save Dialog
+      String? outputFile = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Invoice PDF',
+        fileName: 'Invoice_${invoice.invoiceNumber.replaceAll(RegExp(r'[^a-zA-Z0-9-_]'), '_')}.pdf',
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+
+      // 3. Save File
+      if (outputFile != null) {
+        // Ensure extension
+        if (!outputFile.toLowerCase().endsWith('.pdf')) {
+           outputFile = '$outputFile.pdf';
+        }
+        await File(outputFile).writeAsBytes(bytes);
+        
+        if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invoice Saved Successfully')));
+           _redirectToList();
+        }
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving file: $e')));
+    }
+  }
+
+  void _redirectToList() {
+       final tabProvider = context.read<TabProvider>();
+       if (tabProvider.hasTab('invoices')) {
+         tabProvider.setActiveTab('invoices');
+       } else {
+         tabProvider.addTab(
+           TabItem(
+             id: 'invoices',
+             title: 'Invoices',
+             widget: const InvoicesScreen(),
+             type: TabType.invoices,
+           ),
+         );
+       }
+       
+       if (widget.invoiceId != null) {
+          tabProvider.removeTab('invoice_details_${widget.invoiceId}');
+       } else if (widget.invoice != null) {
+          tabProvider.removeTab('invoice_details_${widget.invoice!.id}');
+       }
   }
 
   void _handleEdit(BuildContext context) {
@@ -627,7 +792,14 @@ class InvoiceDetailsScreen extends StatelessWidget {
     // The TabProvider usually notifies listeners, but the main layout might need to switch index.
     // Assuming the main scaffold listens to tab changes and switches.
     // However, if we are in a modal or pushed route (InvoiceDetailsScreen), we might need to pop.
-    Navigator.pop(context); 
+    // But now we are in a tab, so likely we don't pop? 
+    // Wait, InvoiceDetailsScreen itself is a tab widget now. 
+    // So if we are in a Tab, we are basically just switching tabs.
+    // DO NOT POP unless it was pushed to Navigator.
+    // Since we are moving to Tabs, likely no Navigator.pop needed if we are in a TabView.
+    // But if we accessed this screen via direct push, then pop is valid.
+    // Given the new architecture, let's just addTab.
+    // Navigator.pop(context); // Commented out to avoid popping the main shell if not needed
   }
 
   TabType _TypeToTabType(InvoiceType type) {

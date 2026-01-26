@@ -10,6 +10,7 @@ import '../../widgets/invoice/customer_selector.dart';
 import '../../widgets/invoice/invoice_summary_pane.dart';
 import '../../widgets/invoice/invoice_item_tile.dart';
 import '../invoices_screen.dart';
+import '../invoice_details_screen.dart';
 
 class ProductInvoiceScreen extends StatefulWidget {
   final String? tabId;
@@ -586,13 +587,15 @@ class _ProductInvoiceScreenState extends State<ProductInvoiceScreen> {
         items: _items,
       );
       
+      int? createdId;
       if (widget.existingInvoice != null) {
          await context.read<POSProvider>().updateInvoice(invoice);
+         createdId = widget.existingInvoice!.id;
       } else {
-         await context.read<POSProvider>().createInvoice(invoice);
+         createdId = await context.read<POSProvider>().createInvoice(invoice);
       }
       
-      if (mounted) {
+      if (mounted && createdId != null) {
         final tabProvider = context.read<TabProvider>();
         
         // Close the current tab (create/edit screen)
@@ -600,16 +603,20 @@ class _ProductInvoiceScreenState extends State<ProductInvoiceScreen> {
           tabProvider.removeTab(widget.tabId!);
         }
 
-        // Navigate to Invoices List
-        if (tabProvider.hasTab('invoices')) {
-          tabProvider.setActiveTab('invoices');
+        // Open Invoice Details in a new tab (or replace current if we could, but we closed it)
+        // Check if details tab exists? No, usually unique or generic. 
+        // Let's assume we open a new tab "Invoice #Nr"
+        
+        final detailsTabId = 'invoice_details_$createdId';
+        if (tabProvider.hasTab(detailsTabId)) {
+          tabProvider.setActiveTab(detailsTabId);
         } else {
           tabProvider.addTab(
             TabItem(
-              id: 'invoices',
-              title: 'Invoices',
-              widget: const InvoicesScreen(),
-              type: TabType.invoices,
+              id: detailsTabId,
+              title: 'Invoice #${invoice.invoiceNumber}',
+              widget: InvoiceDetailsScreen(invoiceId: createdId), // Assuming ID ctor exists, let's verify
+              type: TabType.invoiceDetails,
             ),
           );
         }

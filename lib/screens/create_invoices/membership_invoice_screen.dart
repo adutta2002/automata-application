@@ -9,6 +9,7 @@ import '../../core/app_theme.dart';
 import '../../widgets/invoice/customer_selector.dart';
 import '../../widgets/invoice/invoice_summary_pane.dart';
 import '../invoices_screen.dart';
+import '../invoice_details_screen.dart';
 
 class MembershipInvoiceScreen extends StatefulWidget {
   final String? tabId;
@@ -411,28 +412,31 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
       ],
     );
     
+    int? createdId;
     if (widget.existingInvoice != null) {
        await context.read<POSProvider>().updateInvoice(invoice);
+       createdId = widget.existingInvoice!.id;
     } else {
-       await context.read<POSProvider>().createInvoice(invoice);
+       createdId = await context.read<POSProvider>().createInvoice(invoice);
     }
     
-    if (mounted) {
+    if (mounted && createdId != null) {
        final tabProvider = context.read<TabProvider>();
        
        if (widget.tabId != null) {
          tabProvider.removeTab(widget.tabId!);
        }
 
-       if (tabProvider.hasTab('invoices')) {
-         tabProvider.setActiveTab('invoices');
+       final detailsTabId = 'invoice_details_$createdId';
+       if (tabProvider.hasTab(detailsTabId)) {
+         tabProvider.setActiveTab(detailsTabId);
        } else {
          tabProvider.addTab(
            TabItem(
-             id: 'invoices',
-             title: 'Invoices',
-             widget: const InvoicesScreen(),
-             type: TabType.invoices,
+             id: detailsTabId,
+             title: 'Invoice #${invoice.invoiceNumber}',
+             widget: InvoiceDetailsScreen(invoiceId: createdId),
+             type: TabType.invoiceDetails,
            ),
          );
        }
