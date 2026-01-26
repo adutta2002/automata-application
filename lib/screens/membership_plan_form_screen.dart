@@ -21,6 +21,7 @@ class _MembershipPlanFormDialogState extends State<MembershipPlanFormDialog> {
   late TextEditingController _discountValController;
   late TextEditingController _gstController;
   late TextEditingController _benefitsController;
+  late TextEditingController _hsnController;
   
   String _selectedDiscountType = 'FLAT';
   bool _isEdit = false;
@@ -35,6 +36,7 @@ class _MembershipPlanFormDialogState extends State<MembershipPlanFormDialog> {
     _discountValController = TextEditingController(text: widget.plan?.discountValue.toString() ?? '0.0');
     _gstController = TextEditingController(text: widget.plan?.gstRate.toString() ?? '18.0');
     _benefitsController = TextEditingController(text: widget.plan?.benefits ?? '');
+    _hsnController = TextEditingController(text: widget.plan?.hsnCode ?? '');
     _selectedDiscountType = widget.plan?.discountType ?? 'FLAT';
   }
 
@@ -46,6 +48,7 @@ class _MembershipPlanFormDialogState extends State<MembershipPlanFormDialog> {
     _discountValController.dispose();
     _gstController.dispose();
     _benefitsController.dispose();
+    _hsnController.dispose();
     super.dispose();
   }
 
@@ -61,6 +64,7 @@ class _MembershipPlanFormDialogState extends State<MembershipPlanFormDialog> {
       discountValue: double.tryParse(_discountValController.text) ?? 0,
       gstRate: double.tryParse(_gstController.text) ?? 18,
       benefits: _benefitsController.text,
+      hsnCode: _hsnController.text,
     );
 
     if (_isEdit) {
@@ -193,19 +197,62 @@ class _MembershipPlanFormDialogState extends State<MembershipPlanFormDialog> {
                            ),
                          ],
                        ),
-                       const SizedBox(height: 16),
-                       _buildField(
-                         label: 'GST Rate (%)',
-                         child: TextFormField(
-                           controller: _gstController,
-                           keyboardType: TextInputType.number,
-                           decoration: const InputDecoration(
-                             hintText: '18.0', 
-                             border: OutlineInputBorder(),
-                             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                           ),
-                         ),
-                       ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildField(
+                                label: 'HSN Code',
+                                child: Consumer<POSProvider>(
+                                  builder: (context, provider, child) {
+                                    return Autocomplete<HsnCode>(
+                                      initialValue: TextEditingValue(text: _hsnController.text),
+                                      displayStringForOption: (HsnCode option) => option.code,
+                                      optionsBuilder: (TextEditingValue textEditingValue) {
+                                        if (textEditingValue.text == '') return const Iterable<HsnCode>.empty();
+                                        return provider.hsnCodes.where((HsnCode option) => option.code.contains(textEditingValue.text));
+                                      },
+                                      onSelected: (HsnCode selection) {
+                                        _hsnController.text = selection.code;
+                                        _gstController.text = selection.gstRate.toString();
+                                      },
+                                      fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                                        if (textEditingController.text.isEmpty && _hsnController.text.isNotEmpty) {
+                                          textEditingController.text = _hsnController.text;
+                                        }
+                                        return TextFormField(
+                                          controller: textEditingController,
+                                          focusNode: focusNode,
+                                          decoration: const InputDecoration(
+                                            hintText: 'Search HSN', 
+                                            border: OutlineInputBorder(),
+                                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                          ),
+                                          onChanged: (val) => _hsnController.text = val,
+                                        );
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _buildField(
+                                label: 'GST Rate (%)',
+                                child: TextFormField(
+                                  controller: _gstController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    hintText: '18.0', 
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                        const SizedBox(height: 16),
                        _buildField(
                          label: 'Other Benefits',

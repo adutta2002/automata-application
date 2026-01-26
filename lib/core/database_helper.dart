@@ -36,7 +36,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 14,
+      version: 15,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -184,7 +184,8 @@ class DatabaseHelper {
         discount_type TEXT DEFAULT 'FLAT',
         discount_value REAL DEFAULT 0.0,
         gst_rate REAL DEFAULT 18.0,
-        benefits TEXT DEFAULT ''
+        benefits TEXT DEFAULT '',
+        hsn_code TEXT
       )
     ''');
 
@@ -319,6 +320,11 @@ class DatabaseHelper {
       try { await db.execute("ALTER TABLE customers ADD COLUMN gender TEXT"); } catch (_) {}
       try { await db.execute("ALTER TABLE customers ADD COLUMN dob TEXT"); } catch (_) {}
       try { await db.execute("ALTER TABLE customers ADD COLUMN doa TEXT"); } catch (_) {}
+    }
+
+    if (oldVersion < 15) {
+      // Version 15: Membership Plan HSN Code
+      try { await db.execute("ALTER TABLE membership_plans ADD COLUMN hsn_code TEXT"); } catch (_) {}
     }
   }
 

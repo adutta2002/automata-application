@@ -9,8 +9,19 @@ import 'screens/shell_screen.dart';
 import 'screens/login_screen.dart';
 import 'providers/settings_provider.dart';
 
-void main() {
+import 'package:window_manager/window_manager.dart';
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await windowManager.ensureInitialized();
+
+  WindowOptions windowOptions = const WindowOptions(
+    size: Size(1280, 720),
+    center: true,
+    skipTaskbar: false,
+    titleBarStyle: TitleBarStyle.normal,
+  );
+  
   runApp(
     MultiProvider(
       providers: [
@@ -23,6 +34,14 @@ void main() {
       child: const AutomataApp(),
     ),
   );
+
+  await windowManager.waitUntilReadyToShow(windowOptions, () async {
+    await windowManager.show();
+    await windowManager.focus();
+    await windowManager.setTitleBarStyle(TitleBarStyle.normal); // Explicitly ensure normal style
+    await windowManager.setFullScreen(false); // Ensure not in fullscreen
+    await windowManager.maximize();
+  });
 }
 
 class AutomataApp extends StatelessWidget {

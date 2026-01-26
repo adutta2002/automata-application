@@ -354,6 +354,15 @@ class _ProductInvoiceScreenState extends State<ProductInvoiceScreen> {
       isDiscountPercentage: _isBillDiscountPercentage,
       isReady: _items.isNotEmpty,
       paymentMode: _paymentMode,
+      // Pass Advance Parameters
+      availableAdvance: _selectedCustomer?.advanceBalance ?? 0,
+      advanceAdjustedAmount: _advanceAdjustedAmount,
+      onAdvanceAdjusted: (val) {
+        setState(() {
+          _advanceAdjustedAmount = val;
+        });
+        _calculateTotals();
+      },
       onPaymentModeChanged: (val) => setState(() => _paymentMode = val),
       onSave: () => _submitInvoice(InvoiceStatus.active),
       onHold: () => _submitInvoice(InvoiceStatus.hold),

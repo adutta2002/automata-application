@@ -15,6 +15,7 @@ import '../providers/settings_provider.dart';
 import '../services/export_service.dart';
 import 'package:printing/printing.dart';
 import 'dart:io';
+import 'dart:async';
 import '../widgets/common/pagination_controls.dart';
 
 class InvoicesScreen extends StatefulWidget {
@@ -392,19 +393,37 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     );
   }
 
+  // Debounce search
+  Timer? _debounce;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
   Widget _buildSearchBar() {
     return Container(
       padding: const EdgeInsets.all(24),
       color: Colors.white,
       child: TextField(
-        onChanged: (val) => setState(() => _searchQuery = val),
+        onChanged: (val) {
+          setState(() => _searchQuery = val);
+          if (_debounce?.isActive ?? false) _debounce!.cancel();
+          _debounce = Timer(const Duration(milliseconds: 500), () {
+             context.read<POSProvider>().searchInvoices(val);
+          });
+        },
         decoration: InputDecoration(
-          hintText: 'Search by invoice number or customer name...',
+          hintText: 'Search by Invoice No, Customer Name or Phone...',
           prefixIcon: Icon(Icons.search, color: AppTheme.mutedTextColor),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
                   icon: const Icon(Icons.clear),
-                  onPressed: () => setState(() => _searchQuery = ''),
+                  onPressed: () {
+                    setState(() => _searchQuery = '');
+                    context.read<POSProvider>().searchInvoices('');
+                  },
                 )
               : null,
           filled: true,
@@ -430,9 +449,9 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   Widget _buildInvoiceTable() {
     return Consumer<POSProvider>(
       builder: (context, provider, child) {
-        // 1. Filter
+        // 1. Filter (Search is now handled by Provider, so we only filter Status/Type/Date here)
         final filteredInvoices = provider.invoices.where((i) {
-          final matchesSearch = i.invoiceNumber.toLowerCase().contains(_searchQuery.toLowerCase());
+          // final matchesSearch = i.invoiceNumber.toLowerCase().contains(_searchQuery.toLowerCase()); // Handled by DB
           final matchesStatus = _filterStatus == 'ALL' || i.status.name.toUpperCase() == _filterStatus;
           final matchesType = _filterType == null || i.type == _filterType;
           
@@ -444,7 +463,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
             matchesDate = matchesDate && i.createdAt.isBefore(_filterDateTo!.add(const Duration(days: 1)));
           }
 
-          return matchesSearch && matchesStatus && matchesType && matchesDate;
+          return matchesStatus && matchesType && matchesDate;
         }).toList();
 
         if (filteredInvoices.isEmpty) {

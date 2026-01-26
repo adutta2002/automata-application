@@ -464,6 +464,7 @@ class MembershipPlan {
   final String discountType; // 'FLAT' or 'PERCENTAGE'
   final double discountValue;
   final double gstRate;
+  final String? hsnCode;
   final String benefits;
 
   MembershipPlan({
@@ -476,6 +477,7 @@ class MembershipPlan {
     this.discountValue = 0.0,
     this.gstRate = 18.0,
     this.benefits = '',
+    this.hsnCode,
   });
 
   Map<String, dynamic> toMap() {
@@ -489,6 +491,7 @@ class MembershipPlan {
       'discount_value': discountValue,
       'gst_rate': gstRate,
       'benefits': benefits,
+      'hsn_code': hsnCode,
     };
   }
 
@@ -503,6 +506,7 @@ class MembershipPlan {
       discountValue: (map['discount_value'] ?? 0.0).toDouble(),
       gstRate: (map['gst_rate'] ?? 18.0).toDouble(),
       benefits: map['benefits'] ?? '',
+      hsnCode: map['hsn_code'],
     );
   }
 }

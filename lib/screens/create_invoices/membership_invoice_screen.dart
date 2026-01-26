@@ -400,6 +400,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
           itemId: _selectedPlan!.id ?? 0, 
           itemType: 'MEMBERSHIP',
           name: '${_selectedPlan!.name} - ${_selectedPlan!.durationMonths} Months',
+          hsnCode: _selectedPlan!.hsnCode,
           quantity: 1,
           rate: price,
           total: price,

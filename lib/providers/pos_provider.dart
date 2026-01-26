@@ -42,13 +42,7 @@ class POSProvider extends ChangeNotifier {
     _customers = customerMaps.map((m) => Customer.fromMap(m)).toList();
 
     // Load Invoices (Recent)
-    final invoiceMaps = await db.query('invoices', orderBy: 'created_at DESC', limit: 50);
-    _invoices = [];
-    for (var map in invoiceMaps) {
-      final itemMaps = await db.query('invoice_items', where: 'invoice_id = ?', whereArgs: [map['id']]);
-      final items = itemMaps.map((im) => InvoiceItem.fromMap(im)).toList();
-      _invoices.add(Invoice.fromMap(map, items: items));
-    }
+    await loadRecentInvoices();
 
     // Load HSN Codes
     final hsnMaps = await db.query('hsn_master');
@@ -62,6 +56,45 @@ class POSProvider extends ChangeNotifier {
     final planMaps = await db.query('membership_plans');
     _membershipPlans = planMaps.map((m) => MembershipPlan.fromMap(m)).toList();
 
+    notifyListeners();
+  }
+
+  Future<void> loadRecentInvoices() async {
+    final db = await _dbHelper.database;
+    final invoiceMaps = await db.query('invoices', orderBy: 'created_at DESC', limit: 50);
+    _invoices = [];
+    for (var map in invoiceMaps) {
+      final itemMaps = await db.query('invoice_items', where: 'invoice_id = ?', whereArgs: [map['id']]);
+      final items = itemMaps.map((im) => InvoiceItem.fromMap(im)).toList();
+      _invoices.add(Invoice.fromMap(map, items: items));
+    }
+    // No notify here to avoid double notify during initial load, usually fine though
+  }
+
+  Future<void> searchInvoices(String query) async {
+    if (query.trim().isEmpty) {
+      await loadRecentInvoices();
+      notifyListeners();
+      return;
+    }
+
+    final db = await _dbHelper.database;
+    final results = await db.rawQuery('''
+      SELECT i.* 
+      FROM invoices i
+      LEFT JOIN customers c ON i.customer_id = c.id
+      WHERE i.invoice_number LIKE ? 
+         OR c.name LIKE ? 
+         OR c.phone LIKE ?
+      ORDER BY i.created_at DESC
+    ''', ['%$query%', '%$query%', '%$query%']);
+
+    _invoices = [];
+    for (var map in results) {
+      final itemMaps = await db.query('invoice_items', where: 'invoice_id = ?', whereArgs: [map['id']]);
+      final items = itemMaps.map((im) => InvoiceItem.fromMap(im)).toList();
+      _invoices.add(Invoice.fromMap(map, items: items));
+    }
     notifyListeners();
   }
 
