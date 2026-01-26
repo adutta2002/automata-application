@@ -17,6 +17,10 @@ class _SalesSummaryReportState extends State<SalesSummaryReport> {
   DateTime? _dateFrom;
   DateTime? _dateTo;
 
+  Map<String, double> _totals = {};
+  List<Invoice> _reportData = [];
+  bool _isLoading = false;
+
   // Initialize with current month
   @override
   void initState() {
@@ -24,6 +28,32 @@ class _SalesSummaryReportState extends State<SalesSummaryReport> {
     final now = DateTime.now();
     _dateFrom = DateTime(now.year, now.month, 1);
     _dateTo = now;
+    // creating a microtask to allow context usage
+    Future.microtask(() => _loadData());
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    try {
+      final result = await context.read<POSProvider>().getSalesSummary(_dateFrom!, _dateTo!);
+      if (mounted) {
+        setState(() {
+          _reportData = result['invoices'] as List<Invoice>;
+          final totalsMap = result['totals'] as Map<String, dynamic>?;
+          if (totalsMap != null) {
+             _totals = {
+               'revenue': (totalsMap['revenue'] ?? 0.0) as double,
+               'tax': (totalsMap['tax'] ?? 0.0) as double,
+               'discount': (totalsMap['discount'] ?? 0.0) as double,
+             };
+          }
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading report: $e');
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -45,18 +75,20 @@ class _SalesSummaryReportState extends State<SalesSummaryReport> {
           _buildFilters(),
           const SizedBox(height: 24),
           Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                 crossAxisAlignment: CrossAxisAlignment.start,
-                 children: [
-                   _buildSummaryMetrics(),
-                   const SizedBox(height: 24),
-                   _buildSalesTrendChart(),
-                   const SizedBox(height: 24),
-                   _buildDailyBreakdownTable(),
-                 ],
-              ),
-            ),
+            child: _isLoading 
+              ? const Center(child: CircularProgressIndicator())
+              : SingleChildScrollView(
+                  child: Column(
+                     crossAxisAlignment: CrossAxisAlignment.start,
+                     children: [
+                       _buildSummaryMetrics(),
+                       const SizedBox(height: 24),
+                       _buildSalesTrendChart(),
+                       const SizedBox(height: 24),
+                       _buildDailyBreakdownTable(),
+                     ],
+                  ),
+                ),
           ),
         ],
       ),
@@ -112,8 +144,9 @@ class _SalesSummaryReportState extends State<SalesSummaryReport> {
                 if (picked != null) {
                   setState(() {
                     _dateFrom = picked.start;
-                    _dateTo = picked.end;
+                    _dateTo = picked.end.add(const Duration(days: 1)).subtract(const Duration(seconds: 1));
                   });
+                  _loadData();
                 }
               },
               icon: const Icon(Icons.date_range, size: 18),
@@ -125,38 +158,17 @@ class _SalesSummaryReportState extends State<SalesSummaryReport> {
     );
   }
 
-  List<Invoice> _getFilteredInvoices() {
-    final provider = context.read<POSProvider>();
-    return provider.invoices.where((i) {
-      if (i.status != InvoiceStatus.active) return false;
-      return i.createdAt.isAfter(_dateFrom!.subtract(const Duration(seconds: 1))) && 
-             i.createdAt.isBefore(_dateTo!.add(const Duration(days: 1)));
-    }).toList();
-  }
+  // Replaced by _reportData
+  // List<Invoice> _getFilteredInvoices() { ... }
 
   Widget _buildSummaryMetrics() {
-    final invoices = _getFilteredInvoices();
-    
-    double totalNetSales = 0; // Total Amount
-    double totalTax = 0;
-    double totalDiscount = 0;
-    
-    for (var i in invoices) {
-      totalNetSales += i.totalAmount;
-      totalTax += i.taxAmount;
-      totalDiscount += i.discountAmount;
-    }
-    
-    // Derived Gross (Total + Discount - Tax is one way, or SubTotal + Discount)
-    // Let's stick to visible metrics
-    
     return Row(
       children: [
-        Expanded(child: _buildMetricCard('Total Revenue', totalNetSales, Colors.blue)),
+        Expanded(child: _buildMetricCard('Total Revenue', _totals['revenue'] ?? 0, Colors.blue)),
         const SizedBox(width: 16),
-        Expanded(child: _buildMetricCard('Tax Collected', totalTax, Colors.red)),
+        Expanded(child: _buildMetricCard('Tax Collected', _totals['tax'] ?? 0, Colors.red)),
         const SizedBox(width: 16),
-        Expanded(child: _buildMetricCard('Discounts Given', totalDiscount, Colors.orange)),
+        Expanded(child: _buildMetricCard('Discounts Given', _totals['discount'] ?? 0, Colors.orange)),
       ],
     );
   }
@@ -186,7 +198,7 @@ class _SalesSummaryReportState extends State<SalesSummaryReport> {
   }
 
   Widget _buildSalesTrendChart() {
-    final invoices = _getFilteredInvoices();
+    final invoices = _reportData;
     if (invoices.isEmpty) return const SizedBox.shrink();
 
     // Group by Date for the period
@@ -282,7 +294,7 @@ class _SalesSummaryReportState extends State<SalesSummaryReport> {
   }
 
   Widget _buildDailyBreakdownTable() {
-     final invoices = _getFilteredInvoices();
+     final invoices = _reportData;
      
      // Group by Date for table
     final Map<DateTime, List<Invoice>> grouped = {};

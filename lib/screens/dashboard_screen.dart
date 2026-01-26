@@ -15,12 +15,34 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  Map<String, dynamic> _stats = {};
+  bool _isLoading = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<POSProvider>().loadInitialData();
+      _loadData();
     });
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    // Refresh global initial data (branches, etc)
+    await context.read<POSProvider>().loadInitialData();
+    // Fetch dashboard specific stats
+    try {
+      final stats = await context.read<POSProvider>().getDashboardStats();
+      if (mounted) {
+        setState(() {
+          _stats = stats;
+          _isLoading = false;
+        });
+      }
+    } catch(e) {
+      debugPrint('Error loading dashboard stats: $e');
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -30,13 +52,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: const Text('Dashboard'),
         actions: [
           IconButton(
-            onPressed: () => context.read<POSProvider>().loadInitialData(),
+            onPressed: _loadData,
             icon: const Icon(Icons.refresh),
           ),
           const SizedBox(width: 16),
         ],
       ),
-      body: SingleChildScrollView(
+      body: _isLoading 
+        ? const Center(child: CircularProgressIndicator()) 
+        : SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Align(
           alignment: Alignment.topCenter,
@@ -107,20 +131,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildStatsGrid() {
-    return Consumer<POSProvider>(
-      builder: (context, provider, child) {
-        final totalSales = provider.invoices
-            .where((i) => i.status == InvoiceStatus.active)
-            .fold(0.0, (sum, i) => sum + i.totalAmount);
-        
-        final activeInvoices = provider.invoices.where((i) => i.status == InvoiceStatus.active).length;
-        final lowStockItems = provider.products.where((p) => p.stockQuantity < 10).length;
-
-        final activeMemberships = provider.invoices
-            .where((i) => i.type == InvoiceType.membership && i.status == InvoiceStatus.active)
-            .length;
-
-        return GridView.count(
+    return GridView.count(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           crossAxisCount: ResponsiveLayout.getGridCrossAxisCount(context),
@@ -131,32 +142,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             _buildStatCard(
               'Total Revenue',
-              '₹${NumberFormat('#,##,###.##').format(totalSales)}',
+              '₹${NumberFormat('#,##,###.##').format(_stats['totalRevenue'] ?? 0)}',
               Icons.payments_outlined,
               Colors.blue,
             ),
             _buildStatCard(
               'Total Invoices',
-              activeInvoices.toString(),
+              (_stats['totalInvoices'] ?? 0).toString(),
               Icons.receipt_outlined,
               Colors.orange,
             ),
             _buildStatCard(
               'Active Memberships',
-              activeMemberships.toString(),
+              (_stats['activeMemberships'] ?? 0).toString(),
               Icons.card_membership_outlined,
               Colors.purple,
             ),
             _buildStatCard(
               'Low Stock Alerts',
-              lowStockItems.toString(),
+              (_stats['lowStockItems'] ?? 0).toString(),
               Icons.warning_amber_outlined,
               Colors.red,
             ),
           ],
         );
-      },
-    );
   }
 
   Widget _buildStatCard(String title, String value, IconData icon, Color color) {
@@ -207,6 +216,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildRecentInvoices() {
+    final recentInvoicesRaw = _stats['recentInvoices'];
+    final recentInvoices = (recentInvoicesRaw as List?)?.cast<Invoice>() ?? <Invoice>[];
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -219,61 +231,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
-            Consumer<POSProvider>(
-              builder: (context, provider, child) {
-                if (provider.invoices.isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 40),
-                      child: Text('No invoices found'),
+            if (recentInvoices.isEmpty)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 40),
+                  child: Text('No invoices found'),
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: recentInvoices.length,
+                separatorBuilder: (_, __) => const Divider(),
+                itemBuilder: (context, index) {
+                  final invoice = recentInvoices[index];
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(
+                      backgroundColor: _getInvoiceTypeColor(invoice.type).withOpacity(0.1),
+                      child: Icon(
+                        _getInvoiceTypeIcon(invoice.type),
+                        color: _getInvoiceTypeColor(invoice.type),
+                        size: 18,
+                      ),
+                    ),
+                    title: Text(invoice.invoiceNumber, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: Text(DateFormat('dd MMM').format(invoice.createdAt)),
+                    trailing: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '₹${invoice.totalAmount.toStringAsFixed(0)}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                         Text(
+                          invoice.status.name.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: invoice.status == InvoiceStatus.active ? Colors.green : Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
                   );
-                }
-                final recentInvoices = List<Invoice>.from(provider.invoices)
-                  ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
-                return ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: recentInvoices.take(5).length,
-                  separatorBuilder: (_, __) => const Divider(),
-                  itemBuilder: (context, index) {
-                    final invoice = recentInvoices[index];
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: CircleAvatar(
-                        backgroundColor: _getInvoiceTypeColor(invoice.type).withOpacity(0.1),
-                        child: Icon(
-                          _getInvoiceTypeIcon(invoice.type),
-                          color: _getInvoiceTypeColor(invoice.type),
-                          size: 18,
-                        ),
-                      ),
-                      title: Text(invoice.invoiceNumber, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text(DateFormat('dd MMM').format(invoice.createdAt)),
-                      trailing: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            '₹${invoice.totalAmount.toStringAsFixed(0)}',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                          ),
-                           Text(
-                            invoice.status.name.toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 9,
-                              color: invoice.status == InvoiceStatus.active ? Colors.green : Colors.red,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+                },
+              ),
           ],
         ),
       ),

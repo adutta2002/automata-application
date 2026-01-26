@@ -38,8 +38,13 @@ class POSProvider extends ChangeNotifier {
     _services = serviceMaps.map((m) => Service.fromMap(m)).toList();
 
     // Load Customers
-    final customerMaps = await db.query('customers');
-    _customers = customerMaps.map((m) => Customer.fromMap(m)).toList();
+    // Load Customers with Visit Count
+    // Use rawQuery to include subquery for total_visits
+    final customerResults = await db.rawQuery('''
+      SELECT c.*, (SELECT COUNT(*) FROM invoices i WHERE i.customer_id = c.id AND i.status != 'CANCELLED') as total_visits 
+      FROM customers c
+    ''');
+    _customers = customerResults.map((m) => Customer.fromMap(m)).toList();
 
     // Load Invoices (Recent)
     await loadRecentInvoices();
@@ -96,9 +101,160 @@ class POSProvider extends ChangeNotifier {
       _invoices.add(Invoice.fromMap(map, items: items));
     }
     notifyListeners();
+    notifyListeners();
   }
 
-  // --- Invoice Logic ---
+  // --- Real-time Reports ---
+  
+  Future<Map<String, dynamic>> getSalesSummary(DateTime from, DateTime to) async {
+    final db = await _dbHelper.database;
+    final start = from.toIso8601String();
+    final end = to.toIso8601String();
+    
+    // Optimized: Calculate Totals via SQL Aggregation
+    final totalsResult = await db.rawQuery('''
+      SELECT 
+        SUM(total_amount) as total_revenue,
+        SUM(tax_amount) as total_tax,
+        SUM(discount_amount) as total_discount
+      FROM invoices 
+      WHERE status = 'ACTIVE' AND created_at BETWEEN ? AND ?
+    ''', [start, end]);
+    
+    final totals = totalsResult.first;
+    
+    // Still fetch list for the chart and table, but now we have fast totals
+    final results = await db.query(
+      'invoices',
+      where: 'status = ? AND created_at BETWEEN ? AND ?',
+      whereArgs: ['ACTIVE', start, end],
+      orderBy: 'created_at ASC'
+    );
+    
+    List<Invoice> reportInvoices = [];
+    for (var map in results) {
+       reportInvoices.add(Invoice.fromMap(map, items: [])); 
+    }
+    
+    return {
+      'totals': {
+        'revenue': (totals['total_revenue'] ?? 0.0) as double,
+        'tax': (totals['total_tax'] ?? 0.0) as double,
+        'discount': (totals['total_discount'] ?? 0.0) as double,
+      },
+      'invoices': reportInvoices,
+    };
+  }
+
+  Future<List<Invoice>> getCustomerActivity(int customerId, DateTime? from, DateTime? to) async {
+    final db = await _dbHelper.database;
+    
+    String whereClause = 'customer_id = ? AND status = ?';
+    List<dynamic> whereArgs = [customerId, 'ACTIVE'];
+    
+    if (from != null && to != null) {
+      whereClause += ' AND created_at BETWEEN ? AND ?';
+      whereArgs.add(from.toIso8601String());
+      whereArgs.add(to.toIso8601String());
+    }
+    
+    final results = await db.query(
+      'invoices',
+      where: whereClause,
+      whereArgs: whereArgs,
+      orderBy: 'created_at DESC'
+    );
+    
+    List<Invoice> activityInvoices = [];
+    for (var map in results) {
+      // For activity report we likely want items to see what they bought?
+      // The UI shows "Total Spend" and "Avg Basket". 
+      // It also shows "Transaction History" list which opens details.
+      // It ALSO shows "Purchase Distribution" (Service vs Product). For that we NEED items (or at least types).
+      
+      // Let's load items to be safe and correct.
+      final itemMaps = await db.query('invoice_items', where: 'invoice_id = ?', whereArgs: [map['id']]);
+      final items = itemMaps.map((im) => InvoiceItem.fromMap(im)).toList();
+      activityInvoices.add(Invoice.fromMap(map, items: items));
+    }
+    
+    return activityInvoices;
+  }
+
+  // --- Dashboard & Inventory Optimization ---
+
+  Future<Map<String, dynamic>> getDashboardStats() async {
+    final db = await _dbHelper.database;
+    
+    // 1. Total Revenue (Active Invoices)
+    final revenueRes = await db.rawQuery("SELECT SUM(total_amount) as total FROM invoices WHERE status = 'ACTIVE'");
+    final totalRevenue = (revenueRes.first['total'] ?? 0.0) as double;
+
+    // 2. Total Invoices (Active)
+    final countRes = await db.rawQuery("SELECT COUNT(*) as count FROM invoices WHERE status = 'ACTIVE'");
+    final totalInvoices = (countRes.first['count'] ?? 0) as int;
+
+    // 3. Active Memberships
+    // Logic: Invoices of type MEMBERSHIP that are ACTIVE? Or Customers with valid membership?
+    // Dashboard logic was: Invoices where type=MEMBERSHIP AND status=ACTIVE
+    final membershipRes = await db.rawQuery("SELECT COUNT(*) as count FROM invoices WHERE type = 'MEMBERSHIP' AND status = 'ACTIVE'");
+    final activeMemberships = (membershipRes.first['count'] ?? 0) as int;
+
+    // 4. Low Stock Items
+    final stockRes = await db.rawQuery("SELECT COUNT(*) as count FROM products WHERE stock_quantity < 10");
+    final lowStockItems = (stockRes.first['count'] ?? 0) as int;
+
+    // 5. Recent Invoices (Last 5)
+    final recentMaps = await db.query('invoices', orderBy: 'created_at DESC', limit: 5);
+    final recentInvoices = recentMaps.map((m) => Invoice.fromMap(m, items: [])).toList();
+
+    return {
+      'totalRevenue': totalRevenue,
+      'totalInvoices': totalInvoices,
+      'activeMemberships': activeMemberships,
+      'lowStockItems': lowStockItems,
+      'recentInvoices': recentInvoices,
+    };
+  }
+
+  Future<Map<String, dynamic>> getInventorySummary() async {
+     final db = await _dbHelper.database;
+     
+     final res = await db.rawQuery('''
+        SELECT 
+          COUNT(*) as total_items, 
+          SUM(price * stock_quantity) as total_value,
+          (SELECT COUNT(*) FROM products WHERE stock_quantity < 10) as low_stock_count
+        FROM products
+     ''');
+     
+     final data = res.first;
+     return {
+       'totalItems': (data['total_items'] ?? 0) as int,
+       'totalValue': (data['total_value'] ?? 0.0) as double,
+       'lowStockCount': (data['low_stock_count'] ?? 0) as int,
+     };
+  }
+
+  Future<List<Product>> searchInventory({String query = '', bool lowStockOnly = false}) async {
+    final db = await _dbHelper.database;
+    
+    String whereClause = '1=1';
+    List<dynamic> args = [];
+    
+    if (query.isNotEmpty) {
+      whereClause += ' AND (name LIKE ? OR sku LIKE ?)';
+      args.add('%$query%');
+      args.add('%$query%');
+    }
+    
+    if (lowStockOnly) {
+      whereClause += ' AND stock_quantity < 10';
+    }
+    
+    final maps = await db.query('products', where: whereClause, whereArgs: args, orderBy: 'stock_quantity ASC');
+    return maps.map((m) => Product.fromMap(m)).toList();
+  }
   
   String generateInvoiceNumber() {
     // Get current branch short code

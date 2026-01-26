@@ -19,6 +19,29 @@ class _CustomerActivityReportState extends State<CustomerActivityReport> {
   DateTime? _dateFrom;
   DateTime? _dateTo;
 
+  List<Invoice> _reportData = [];
+  bool _isLoading = false;
+
+  Future<void> _loadData() async {
+    if (_selectedCustomer == null) {
+        setState(() => _reportData = []);
+        return;
+    }
+    setState(() => _isLoading = true);
+    try {
+      final result = await context.read<POSProvider>().getCustomerActivity(_selectedCustomer!.id!, _dateFrom, _dateTo);
+      if (mounted) {
+        setState(() {
+          _reportData = result;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading customer activity: $e');
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -48,23 +71,25 @@ class _CustomerActivityReportState extends State<CustomerActivityReport> {
           ),
           const SizedBox(height: 24),
           Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildFilters(),
-                  const SizedBox(height: 24),
-                  if (_selectedCustomer != null) ...[
-                    _buildSummaryCards(),
-                    const SizedBox(height: 24),
-                    _buildAnalysisSection(),
-                    const SizedBox(height: 24),
-                    _buildTransactionHistory(),
-                  ] else
-                    _buildEmptyState(),
-                ],
-              ),
-            ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildFilters(),
+                        const SizedBox(height: 24),
+                        if (_selectedCustomer != null) ...[
+                          _buildSummaryCards(),
+                          const SizedBox(height: 24),
+                          _buildAnalysisSection(),
+                          const SizedBox(height: 24),
+                          _buildTransactionHistory(),
+                        ] else
+                          _buildEmptyState(),
+                      ],
+                    ),
+                  ),
           ),
         ],
       ),
@@ -113,11 +138,12 @@ class _CustomerActivityReportState extends State<CustomerActivityReport> {
                                     c.phone.contains(textEditingValue.text);
                            });
                         },
-                        onSelected: (Customer c) {
-                          setState(() {
-                            _selectedCustomer = c;
-                          });
-                        },
+                          onSelected: (Customer c) {
+                            setState(() {
+                              _selectedCustomer = c;
+                            });
+                            _loadData();
+                          },
                         fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
                           return TextField(
                             controller: controller,
@@ -153,12 +179,13 @@ class _CustomerActivityReportState extends State<CustomerActivityReport> {
                           );
                         },
                       );
-                      if (picked != null) {
-                        setState(() {
-                          _dateFrom = picked.start;
-                          _dateTo = picked.end;
-                        });
-                      }
+                        if (picked != null) {
+                          setState(() {
+                            _dateFrom = picked.start;
+                            _dateTo = picked.end.add(const Duration(days: 1)).subtract(const Duration(seconds: 1));
+                          });
+                          _loadData();
+                        }
                     },
                     child: InputDecorator(
                       decoration: const InputDecoration(
@@ -183,6 +210,7 @@ class _CustomerActivityReportState extends State<CustomerActivityReport> {
                         _selectedCustomer = null; 
                         _dateFrom = null;
                         _dateTo = null;
+                        _reportData = [];
                       });
                     },
                     icon: const Icon(Icons.clear),
@@ -200,25 +228,11 @@ class _CustomerActivityReportState extends State<CustomerActivityReport> {
     );
   }
 
-  List<Invoice> _getFilteredInvoices() {
-    if (_selectedCustomer == null) return [];
-    final provider = context.read<POSProvider>();
-    return provider.invoices.where((i) {
-      if (i.customerId != _selectedCustomer!.id) return false;
-      if (i.status != InvoiceStatus.active) return false;
-      
-      bool inDate = true;
-      if (_dateFrom != null && _dateTo != null) {
-        final date = i.createdAt;
-        inDate = date.isAfter(_dateFrom!.subtract(const Duration(seconds: 1))) && 
-                 date.isBefore(_dateTo!.add(const Duration(days: 1)));
-      }
-      return inDate;
-    }).toList();
-  }
+  // Replaced by _reportData
+  // List<Invoice> _getFilteredInvoices() { ... }
 
   Widget _buildSummaryCards() {
-    final invoices = _getFilteredInvoices();
+    final invoices = _reportData;
     final totalVisits = invoices.length;
     final totalSpend = invoices.fold(0.0, (sum, i) => sum + i.totalAmount);
     final avgBasket = totalVisits > 0 ? totalSpend / totalVisits : 0.0;
@@ -264,7 +278,7 @@ class _CustomerActivityReportState extends State<CustomerActivityReport> {
   }
 
   Widget _buildAnalysisSection() {
-    final invoices = _getFilteredInvoices();
+    final invoices = _reportData;
     if (invoices.isEmpty) return const SizedBox.shrink();
 
     // Pie Chart Data: Revenue by Type
@@ -351,7 +365,7 @@ class _CustomerActivityReportState extends State<CustomerActivityReport> {
   }
 
   Widget _buildTransactionHistory() {
-     final invoices = _getFilteredInvoices().toList()
+     final invoices = _reportData.toList()
         ..sort((a,b) => b.createdAt.compareTo(a.createdAt));
 
      return Card(

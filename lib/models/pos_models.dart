@@ -12,6 +12,7 @@ class Customer {
   final String? gender;
   final DateTime? dob;
   final DateTime? doa;
+  final int totalVisits;
 
   Customer({
     this.id,
@@ -26,6 +27,7 @@ class Customer {
     this.gender,
     this.dob,
     this.doa,
+    this.totalVisits = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -42,6 +44,7 @@ class Customer {
       'gender': gender,
       'dob': dob?.toIso8601String(),
       'doa': doa?.toIso8601String(),
+      'total_visits': totalVisits,
     };
   }
 
@@ -59,6 +62,7 @@ class Customer {
       gender: map['gender'],
       dob: map['dob'] != null ? DateTime.parse(map['dob']) : null,
       doa: map['doa'] != null ? DateTime.parse(map['doa']) : null,
+      totalVisits: map['total_visits'] ?? 0,
     );
   }
 }
