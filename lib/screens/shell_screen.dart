@@ -19,7 +19,7 @@ import 'membership_plans_screen.dart';
 import 'settings_screen.dart';
 import 'create_invoices/service_invoice_screen.dart';
 import 'create_invoices/product_invoice_screen.dart';
-import 'create_invoices/advance_invoice_screen.dart';
+
 import 'create_invoices/membership_invoice_screen.dart';
 
 class ShellScreen extends StatefulWidget {
@@ -191,16 +191,7 @@ class _ShellScreenState extends State<ShellScreen> {
                child: Row(children: [Icon(Icons.shopping_bag_outlined), SizedBox(width: 12), Text('Product Invoice')]),
             ),
           ),
-           SimpleDialogOption(
-            onPressed: () {
-              Navigator.pop(context);
-              _navigateToCreateInvoice(context, InvoiceType.advance);
-            },
-            child: const Padding(
-               padding: EdgeInsets.symmetric(vertical: 8),
-               child: Row(children: [Icon(Icons.payments_outlined), SizedBox(width: 12), Text('Advance Payment')]),
-            ),
-          ),
+
           SimpleDialogOption(
             onPressed: () {
               Navigator.pop(context);
@@ -233,16 +224,14 @@ class _ShellScreenState extends State<ShellScreen> {
         title = 'Product Inv';
         tabType = TabType.productInvoice;
         break;
-      case InvoiceType.advance: 
-        screen = AdvancePaymentScreen(tabId: tabId); 
-        title = 'Advance Pmt';
-        tabType = TabType.advance;
-        break;
+
       case InvoiceType.membership: 
         screen = MembershipInvoiceScreen(tabId: tabId); 
         title = 'Membership';
         tabType = TabType.membership;
         break;
+      case InvoiceType.advance:
+        return; // Should not be reached via this menu
     }
 
     context.read<TabProvider>().addTab(

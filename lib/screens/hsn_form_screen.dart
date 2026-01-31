@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../models/pos_models.dart';
 import '../providers/pos_provider.dart';
+import '../utils/validators.dart';
 import '../core/app_theme.dart';
 
 class HsnFormDialog extends StatefulWidget {
@@ -19,6 +20,10 @@ class _HsnFormDialogState extends State<HsnFormDialog> {
   late TextEditingController _codeController;
   late TextEditingController _descriptionController;
   late TextEditingController _rateController;
+  late TextEditingController _cgstController;
+  late TextEditingController _sgstController;
+  late TextEditingController _igstController;
+  late TextEditingController _cessController;
   
   String _selectedType = 'GOODS';
   DateTime? _effectiveFrom;
@@ -33,6 +38,12 @@ class _HsnFormDialogState extends State<HsnFormDialog> {
     _codeController = TextEditingController(text: widget.hsn?.code ?? '');
     _descriptionController = TextEditingController(text: widget.hsn?.description ?? '');
     _rateController = TextEditingController(text: widget.hsn?.gstRate.toString() ?? '');
+    
+    _cgstController = TextEditingController(text: widget.hsn?.cgstRate.toString() ?? '');
+    _sgstController = TextEditingController(text: widget.hsn?.sgstRate.toString() ?? '');
+    _igstController = TextEditingController(text: widget.hsn?.igstRate.toString() ?? '');
+    _cessController = TextEditingController(text: widget.hsn?.cessRate.toString() ?? '');
+
     _selectedType = widget.hsn?.type ?? 'GOODS';
     _effectiveFrom = widget.hsn?.effectiveFrom;
     _effectiveTo = widget.hsn?.effectiveTo;
@@ -43,7 +54,33 @@ class _HsnFormDialogState extends State<HsnFormDialog> {
     _codeController.dispose();
     _descriptionController.dispose();
     _rateController.dispose();
+    _cgstController.dispose();
+    _sgstController.dispose();
+    _igstController.dispose();
+    _cessController.dispose();
     super.dispose();
+  }
+
+  void _onTotalRateChanged(String val) {
+    final total = double.tryParse(val) ?? 0;
+    final half = total / 2;
+    _cgstController.text = half.toStringAsFixed(2);
+    _sgstController.text = half.toStringAsFixed(2);
+    _igstController.text = total.toStringAsFixed(2);
+    // Cess remains as is or 0
+  }
+
+  void _onComponentRateChanged() {
+    // Optional: Auto-calculate total if components change? 
+    // For now let's keep it simple: Total drives components by default, but components can be edited manually.
+    // If components are edited, maybe we should update total?
+    final cgst = double.tryParse(_cgstController.text) ?? 0;
+    final sgst = double.tryParse(_sgstController.text) ?? 0;
+    final total = cgst + sgst;
+    if (_rateController.text != total.toString()) {
+       _rateController.text = total.toStringAsFixed(2);
+       _igstController.text = total.toStringAsFixed(2); // Usually IGST is sum of CGST+SGST
+    }
   }
 
   Future<void> _selectDate(BuildContext context, bool isFrom) async {
@@ -72,6 +109,10 @@ class _HsnFormDialogState extends State<HsnFormDialog> {
       code: _codeController.text,
       description: _descriptionController.text,
       gstRate: double.tryParse(_rateController.text) ?? 0,
+      cgstRate: double.tryParse(_cgstController.text) ?? 0,
+      sgstRate: double.tryParse(_sgstController.text) ?? 0,
+      igstRate: double.tryParse(_igstController.text) ?? 0,
+      cessRate: double.tryParse(_cessController.text) ?? 0,
       type: _selectedType,
       effectiveFrom: _effectiveFrom,
       effectiveTo: _effectiveTo,
@@ -92,7 +133,7 @@ class _HsnFormDialogState extends State<HsnFormDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
-        width: 500,
+        width: 600, // Slightly wider
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -135,14 +176,14 @@ class _HsnFormDialogState extends State<HsnFormDialog> {
                                   border: OutlineInputBorder(),
                                   contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                                 ),
-                                validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+                                validator: Validators.required,
                               ),
                             ),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
                             child: _buildField(
-                              label: 'GST Rate (%)',
+                              label: 'Total GST Rate (%)',
                               child: TextFormField(
                                 controller: _rateController,
                                 keyboardType: TextInputType.number,
@@ -150,13 +191,83 @@ class _HsnFormDialogState extends State<HsnFormDialog> {
                                   hintText: 'e.g. 18.0',
                                   border: OutlineInputBorder(),
                                   contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                  suffixText: '%',
                                 ),
-                                validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+                                onChanged: _onTotalRateChanged,
+                                validator: (val) => Validators.required(val) ?? Validators.nonNegativeNumber(val),
                               ),
                             ),
                           ),
                         ],
                       ),
+                      const SizedBox(height: 16),
+                      
+                      // Configurable Split Section
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Column(
+                           crossAxisAlignment: CrossAxisAlignment.start,
+                           children: [
+                             const Text('Tax Breakdown (Configurable)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.indigo)),
+                             const SizedBox(height: 12),
+                             Row(
+                               children: [
+                                 Expanded(
+                                   child: _buildField(
+                                     label: 'CGST %',
+                                     child: TextFormField(
+                                       controller: _cgstController,
+                                       keyboardType: TextInputType.number,
+                                       onChanged: (_) => _onComponentRateChanged(),
+                                       decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8), isDense: true),
+                                     ),
+                                   ),
+                                 ),
+                                 const SizedBox(width: 8),
+                                 Expanded(
+                                   child: _buildField(
+                                     label: 'SGST %',
+                                     child: TextFormField(
+                                       controller: _sgstController,
+                                       keyboardType: TextInputType.number,
+                                       onChanged: (_) => _onComponentRateChanged(),
+                                       decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8), isDense: true),
+                                     ),
+                                   ),
+                                 ),
+                                 const SizedBox(width: 8),
+                                 Expanded(
+                                   child: _buildField(
+                                     label: 'IGST %',
+                                     child: TextFormField(
+                                       controller: _igstController,
+                                       keyboardType: TextInputType.number,
+                                       decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8), isDense: true),
+                                     ),
+                                   ),
+                                 ),
+                                 const SizedBox(width: 8),
+                                 Expanded(
+                                   child: _buildField(
+                                     label: 'CESS %',
+                                     child: TextFormField(
+                                       controller: _cessController,
+                                       keyboardType: TextInputType.number,
+                                       decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8), isDense: true),
+                                     ),
+                                   ),
+                                 ),
+                               ],
+                             ),
+                           ],
+                        ),
+                      ),
+
                       const SizedBox(height: 16),
                       _buildField(
                         label: 'Type',

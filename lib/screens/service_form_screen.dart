@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/pos_models.dart';
 import '../providers/pos_provider.dart';
+import '../utils/validators.dart';
 import '../core/app_theme.dart';
 
 class ServiceFormDialog extends StatefulWidget {
@@ -70,6 +71,24 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
   Widget build(BuildContext context) {
     final hsnCodes = context.read<POSProvider>().hsnCodes;
 
+    // Check if current HSN text matches a valid HSN code
+    bool isRateLocked = false;
+    try {
+      final matchingHsn = hsnCodes.firstWhere(
+        (h) => h.code.trim().toLowerCase() == _hsnController.text.trim().toLowerCase(),
+      );
+      
+      // If found, enforce the rate
+      if (_gstRates.contains(matchingHsn.gstRate)) {
+        if (_selectedGst != matchingHsn.gstRate) {
+           WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) setState(() => _selectedGst = matchingHsn.gstRate);
+           });
+        }
+        isRateLocked = true;
+      }
+    } catch (_) {}
+
     return Dialog(
        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
        child: Container(
@@ -112,7 +131,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                              border: OutlineInputBorder(),
                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                            ),
-                           validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+                           validator: Validators.required,
                          ),
                        ),
                        const SizedBox(height: 16),
@@ -142,7 +161,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                                    border: OutlineInputBorder(),
                                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                                  ),
-                                 validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+                                 validator: Validators.positiveNumber,
                                ),
                              ),
                            ),
@@ -177,7 +196,10 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                                         border: OutlineInputBorder(),
                                         contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                                      ),
-                                     onChanged: (val) => _hsnController.text = val,
+                                     onChanged: (val) {
+                                       _hsnController.text = val;
+                                       setState(() {}); // Trigger matching check
+                                     },
                                    );
                                  },
                                ),
@@ -190,12 +212,14 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                          label: 'GST Rate',
                          child: DropdownButtonFormField<double>(
                            value: _gstRates.contains(_selectedGst) ? _selectedGst : 0.0,
-                           decoration: const InputDecoration(
-                             border: OutlineInputBorder(),
-                             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                           decoration: InputDecoration(
+                             border: const OutlineInputBorder(),
+                             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                             filled: isRateLocked,
+                             fillColor: isRateLocked ? Colors.grey.shade200 : null,
                            ),
                            items: _gstRates.map((r) => DropdownMenuItem(value: r, child: Text('${r.toInt()}%'))).toList(),
-                           onChanged: (val) => setState(() => _selectedGst = val!),
+                           onChanged: isRateLocked ? null : (val) => setState(() => _selectedGst = val!),
                          ),
                        ),
                      ],

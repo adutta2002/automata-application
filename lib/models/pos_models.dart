@@ -13,6 +13,7 @@ class Customer {
   final DateTime? dob;
   final DateTime? doa;
   final int totalVisits;
+  final String? state;
 
   Customer({
     this.id,
@@ -28,6 +29,7 @@ class Customer {
     this.dob,
     this.doa,
     this.totalVisits = 0,
+    this.state,
   });
 
   Map<String, dynamic> toMap() {
@@ -44,7 +46,7 @@ class Customer {
       'gender': gender,
       'dob': dob?.toIso8601String(),
       'doa': doa?.toIso8601String(),
-      'total_visits': totalVisits,
+      'state': state,
     };
   }
 
@@ -63,6 +65,7 @@ class Customer {
       dob: map['dob'] != null ? DateTime.parse(map['dob']) : null,
       doa: map['doa'] != null ? DateTime.parse(map['doa']) : null,
       totalVisits: map['total_visits'] ?? 0,
+      state: map['state'],
     );
   }
 }
@@ -165,7 +168,47 @@ class Service {
 
 enum InvoiceType { service, product, advance, membership }
 
-enum InvoiceStatus { active, cancelled, hold }
+enum InvoiceStatus { active, cancelled, hold, partial, completed }
+
+class InvoicePayment {
+  final int? id;
+  final int? invoiceId;
+  final double amount;
+  final String mode; // CASH, UPI, CARD, ADVANCE
+  final String? transactionId;
+  final DateTime? paymentDate;
+
+  InvoicePayment({
+    this.id,
+    this.invoiceId,
+    required this.amount,
+    required this.mode,
+    this.transactionId,
+    this.paymentDate,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'invoice_id': invoiceId,
+      'amount': amount,
+      'mode': mode,
+      'transaction_id': transactionId,
+      'payment_date': (paymentDate ?? DateTime.now()).toIso8601String(),
+    };
+  }
+
+  factory InvoicePayment.fromMap(Map<String, dynamic> map) {
+    return InvoicePayment(
+      id: map['id'],
+      invoiceId: map['invoice_id'],
+      amount: (map['amount'] ?? 0.0).toDouble(),
+      mode: map['mode'] ?? 'CASH',
+      transactionId: map['transaction_id'],
+      paymentDate: map['payment_date'] != null ? DateTime.parse(map['payment_date']) : null,
+    );
+  }
+}
 
 class Invoice {
   final int? id;
@@ -173,15 +216,19 @@ class Invoice {
   final int? customerId;
   final int? branchId;
   final InvoiceType type;
+  final String billType; // 'REGULAR' or 'ADVANCE'
   final double subTotal;
   final double taxAmount;
   final double discountAmount;
   final double totalAmount;
+  final double paidAmount;
+  final double balanceAmount;
   final InvoiceStatus status;
   final String? cancellationReason;
   final DateTime createdAt;
   final List<InvoiceItem> items;
-  final String? paymentMode;
+  final List<InvoicePayment> payments; // New field
+  final String? paymentMode; // Kept as primary/summary mode
   final String? notes;
   final double advanceAdjustedAmount;
 
@@ -191,14 +238,18 @@ class Invoice {
     this.customerId,
     this.branchId,
     required this.type,
+    this.billType = 'REGULAR',
     required this.subTotal,
     required this.taxAmount,
     required this.discountAmount,
     required this.totalAmount,
+    this.paidAmount = 0.0,
+    this.balanceAmount = 0.0,
     this.status = InvoiceStatus.active,
     this.cancellationReason,
     required this.createdAt,
     this.items = const [],
+    this.payments = const [], // New field
     this.paymentMode,
     this.notes,
     this.advanceAdjustedAmount = 0,
@@ -211,10 +262,13 @@ class Invoice {
       'customer_id': customerId,
       'branch_id': branchId,
       'type': type.name.toUpperCase(),
+      'bill_type': billType,
       'sub_total': subTotal,
       'tax_amount': taxAmount,
       'discount_amount': discountAmount,
       'total_amount': totalAmount,
+      'paid_amount': paidAmount,
+      'balance_amount': balanceAmount,
       'status': status.name.toUpperCase(),
       'cancellation_reason': cancellationReason,
       'created_at': createdAt.toIso8601String(),
@@ -224,21 +278,25 @@ class Invoice {
     };
   }
 
-  factory Invoice.fromMap(Map<String, dynamic> map, {List<InvoiceItem> items = const []}) {
+  factory Invoice.fromMap(Map<String, dynamic> map, {List<InvoiceItem> items = const [], List<InvoicePayment> payments = const []}) {
     return Invoice(
       id: map['id'],
       invoiceNumber: map['invoice_number'] ?? '',
       customerId: map['customer_id'],
       branchId: map['branch_id'],
       type: InvoiceType.values.firstWhere((e) => e.name.toUpperCase() == map['type'], orElse: () => InvoiceType.product),
+      billType: map['bill_type'] ?? 'REGULAR',
       subTotal: (map['sub_total'] ?? 0.0).toDouble(),
       taxAmount: (map['tax_amount'] ?? 0.0).toDouble(),
       discountAmount: (map['discount_amount'] ?? 0.0).toDouble(),
       totalAmount: (map['total_amount'] ?? 0.0).toDouble(),
+      paidAmount: (map['paid_amount'] ?? 0.0).toDouble(),
+      balanceAmount: (map['balance_amount'] ?? 0.0).toDouble(),
       status: InvoiceStatus.values.firstWhere((e) => e.name.toUpperCase() == map['status'], orElse: () => InvoiceStatus.active),
       cancellationReason: map['cancellation_reason'],
       createdAt: DateTime.parse(map['created_at'] ?? DateTime.now().toIso8601String()),
       items: items,
+      payments: payments, // New field map
       paymentMode: map['payment_mode'],
       notes: map['notes'],
       advanceAdjustedAmount: (map['advance_adjusted_amount'] ?? 0.0).toDouble(),
@@ -254,6 +312,7 @@ class Branch {
   final String? gstin;
   final String? shortCode;
   final bool isActive;
+  final String? state;
 
   Branch({
     this.id,
@@ -263,6 +322,7 @@ class Branch {
     this.gstin,
     this.shortCode,
     this.isActive = true,
+    this.state,
   });
 
   Map<String, dynamic> toMap() {
@@ -274,6 +334,7 @@ class Branch {
       'gstin': gstin,
       'short_code': shortCode,
       'is_active': isActive ? 1 : 0,
+      'state': state,
     };
   }
 
@@ -286,6 +347,7 @@ class Branch {
       gstin: map['gstin'],
       shortCode: map['short_code'],
       isActive: map['is_active'] == 1,
+      state: map['state'],
     );
   }
 }
@@ -402,6 +464,10 @@ class HsnCode {
   final String code;
   final String description;
   final double gstRate;
+  final double cgstRate;
+  final double sgstRate;
+  final double igstRate;
+  final double cessRate;
   final String type; // 'GOODS' or 'SERVICES'
   final DateTime? effectiveFrom;
   final DateTime? effectiveTo;
@@ -411,6 +477,10 @@ class HsnCode {
     required this.code,
     required this.description,
     required this.gstRate,
+    this.cgstRate = 0,
+    this.sgstRate = 0,
+    this.igstRate = 0,
+    this.cessRate = 0,
     this.type = 'GOODS',
     this.effectiveFrom,
     this.effectiveTo,
@@ -422,6 +492,10 @@ class HsnCode {
       'code': code,
       'description': description,
       'gst_rate': gstRate,
+      'cgst_rate': cgstRate,
+      'sgst_rate': sgstRate,
+      'igst_rate': igstRate,
+      'cess_rate': cessRate,
       'type': type,
       'effective_from': effectiveFrom?.toIso8601String(),
       'effective_to': effectiveTo?.toIso8601String(),
@@ -434,6 +508,10 @@ class HsnCode {
       code: map['code'] ?? '',
       description: map['description'] ?? '',
       gstRate: (map['gst_rate'] ?? 0.0).toDouble(),
+      cgstRate: (map['cgst_rate'] ?? 0.0).toDouble(),
+      sgstRate: (map['sgst_rate'] ?? 0.0).toDouble(),
+      igstRate: (map['igst_rate'] ?? 0.0).toDouble(),
+      cessRate: (map['cess_rate'] ?? 0.0).toDouble(),
       type: map['type'] ?? 'GOODS',
       effectiveFrom: map['effective_from'] != null ? DateTime.parse(map['effective_from']) : null,
       effectiveTo: map['effective_to'] != null ? DateTime.parse(map['effective_to']) : null,
@@ -447,6 +525,7 @@ class HsnTaxBreakdown {
   final double gstRate;
   final double cgst;
   final double sgst;
+  final double igst;
   final double totalTax;
 
   HsnTaxBreakdown({
@@ -455,6 +534,7 @@ class HsnTaxBreakdown {
     required this.gstRate,
     required this.cgst,
     required this.sgst,
+    required this.igst,
     required this.totalTax,
   });
 }

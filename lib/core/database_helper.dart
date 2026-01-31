@@ -36,7 +36,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 15,
+      version: 19,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -71,7 +71,8 @@ class DatabaseHelper {
         advance_balance REAL DEFAULT 0,
         gender TEXT,
         dob TEXT,
-        doa TEXT
+        doa TEXT,
+        state TEXT
       )
     ''');
 
@@ -112,7 +113,8 @@ class DatabaseHelper {
         phone TEXT NOT NULL,
         gstin TEXT,
         short_code TEXT,
-        is_active INTEGER DEFAULT 1
+        is_active INTEGER DEFAULT 1,
+        state TEXT
       )
     ''');
 
@@ -124,10 +126,13 @@ class DatabaseHelper {
         customer_id INTEGER,
         branch_id INTEGER,
         type TEXT NOT NULL,
+        bill_type TEXT DEFAULT 'REGULAR',
         sub_total REAL NOT NULL,
         tax_amount REAL NOT NULL,
         discount_amount REAL NOT NULL,
         total_amount REAL NOT NULL,
+        paid_amount REAL DEFAULT 0,
+        balance_amount REAL DEFAULT 0,
         status TEXT DEFAULT 'ACTIVE',
         cancellation_reason TEXT,
         created_at TEXT NOT NULL,
@@ -191,10 +196,39 @@ class DatabaseHelper {
 
     // Create default admin user
     await _createDefaultAdmin(db);
+
+    // 10. Invoice Payments Table (Version 17)
+    await db.execute('''
+      CREATE TABLE invoice_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        invoice_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        mode TEXT NOT NULL,
+        transaction_id TEXT,
+        payment_date TEXT,
+        FOREIGN KEY (invoice_id) REFERENCES invoices (id)
+      )
+    ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // ... (previous migrations) ...
+    if (oldVersion < 17) {
+       await db.execute('''
+        CREATE TABLE IF NOT EXISTS invoice_payments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          invoice_id INTEGER NOT NULL,
+          amount REAL NOT NULL,
+          mode TEXT NOT NULL,
+          transaction_id TEXT,
+          payment_date TEXT,
+          FOREIGN KEY (invoice_id) REFERENCES invoices (id)
+        )
+      ''');
+    }
+    
+    // Previous upgrade logic (if any specific column additions were needed previously, they'd be here)
+    // For now we just focus on the new table
+    // Previous upgrade logic continues below
 
     if (oldVersion < 5) {
       // Version 5: HSN Master
@@ -325,6 +359,25 @@ class DatabaseHelper {
     if (oldVersion < 15) {
       // Version 15: Membership Plan HSN Code
       try { await db.execute("ALTER TABLE membership_plans ADD COLUMN hsn_code TEXT"); } catch (_) {}
+    }
+
+    if (oldVersion < 16) {
+      // Version 16: Integrated Advance Invoice (Bill Type, Paid, Balance)
+      try { await db.execute("ALTER TABLE invoices ADD COLUMN bill_type TEXT DEFAULT 'REGULAR'"); } catch (_) {}
+      try { await db.execute("ALTER TABLE invoices ADD COLUMN paid_amount REAL DEFAULT 0"); } catch (_) {}
+      try { await db.execute("ALTER TABLE invoices ADD COLUMN balance_amount REAL DEFAULT 0"); } catch (_) {}
+    }
+    if (oldVersion < 18) {
+      // Version 18: HSN Configurable GST Split
+      try { await db.execute("ALTER TABLE hsn_master ADD COLUMN cgst_rate REAL DEFAULT 0"); } catch (_) {}
+      try { await db.execute("ALTER TABLE hsn_master ADD COLUMN sgst_rate REAL DEFAULT 0"); } catch (_) {}
+      try { await db.execute("ALTER TABLE hsn_master ADD COLUMN igst_rate REAL DEFAULT 0"); } catch (_) {}
+      try { await db.execute("ALTER TABLE hsn_master ADD COLUMN cess_rate REAL DEFAULT 0"); } catch (_) {}
+    }
+    if (oldVersion < 19) {
+      // Version 19: State field for IGST Logic
+      try { await db.execute("ALTER TABLE branches ADD COLUMN state TEXT"); } catch (_) {}
+      try { await db.execute("ALTER TABLE customers ADD COLUMN state TEXT"); } catch (_) {}
     }
   }
 

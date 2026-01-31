@@ -28,6 +28,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
   double _billDiscountInput = 0;
   bool _isBillDiscountPercentage = false;
   String _paymentMode = 'CASH';
+  List<InvoicePayment> _payments = [];
   
   DateTime _selectedDate = DateTime.now();
 
@@ -321,9 +322,18 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
       isDiscountPercentage: _isBillDiscountPercentage,
       isReady: _selectedCustomer != null && _selectedPlan != null,
       paymentMode: _paymentMode,
-      onPaymentModeChanged: (val) => setState(() => _paymentMode = val),
+      onPaymentModeChanged: (val) {
+        setState(() {
+           _paymentMode = val;
+           if (val != 'SPLIT') {
+             _payments = [];
+           }
+        });
+      },
+      payments: _payments,
+      onPaymentsChanged: (val) => setState(() => _payments = val),
       onSave: () => _submitMembership(InvoiceStatus.active),
-      onHold: () => _submitMembership(InvoiceStatus.hold),
+
       onDiscountChanged: (val, isPercentage) {
          setState(() {
           _billDiscountInput = val;
@@ -394,6 +404,9 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
       discountAmount: _billDiscount,
       totalAmount: total,
       paymentMode: _paymentMode,
+      payments: _payments.isNotEmpty 
+          ? _payments 
+          : [InvoicePayment(amount: total, mode: _paymentMode)],
       status: status,
       createdAt: _selectedDate,
       items: [

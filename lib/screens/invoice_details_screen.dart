@@ -16,7 +16,7 @@ import 'package:file_picker/file_picker.dart';
 import 'invoices_screen.dart';
 import 'create_invoices/service_invoice_screen.dart';
 import 'create_invoices/product_invoice_screen.dart';
-import 'create_invoices/advance_invoice_screen.dart';
+
 import 'create_invoices/membership_invoice_screen.dart';
 
 class InvoiceDetailsScreen extends StatefulWidget {
@@ -41,24 +41,14 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
   }
 
   Future<void> _loadInvoice() async {
-    if (widget.invoice != null) {
-      if (mounted) {
-        setState(() {
-          _invoice = widget.invoice;
-          _isLoading = false;
-        });
-      }
-      return;
-    }
-
-    if (widget.invoiceId != null) {
+    final id = widget.invoiceId ?? widget.invoice?.id;
+    
+    if (id != null) {
       try {
-        // Defer to next frame to allow context access if needed, though initState is usually fine for read
-        // But context.read is safe here.
-        final inv = await context.read<POSProvider>().getInvoiceById(widget.invoiceId!);
+        final inv = await context.read<POSProvider>().getInvoiceById(id);
         if (mounted) {
           setState(() {
-            _invoice = inv;
+            _invoice = inv; // This will be the fresh object from DB
             _isLoading = false;
             if (inv == null) {
               _error = "Invoice not found";
@@ -69,11 +59,21 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
         if (mounted) setState(() => _error = e.toString());
       }
     } else {
-        if (mounted) {
-             setState(() {
-                _error = "No Invoice ID provided";
-                _isLoading = false; 
-             });
+        // Fallback if no ID (should not happen for saved invoices)
+        if (widget.invoice != null) {
+            if (mounted) {
+                setState(() {
+                  _invoice = widget.invoice;
+                  _isLoading = false;
+                });
+            }
+        } else {
+            if (mounted) {
+                 setState(() {
+                    _error = "No Invoice ID provided";
+                    _isLoading = false; 
+                 });
+            }
         }
     }
   }
@@ -160,23 +160,26 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
             ),
           ),
 
-          if (invoice.status == InvoiceStatus.hold) ...[
+
+          if (invoice.status == InvoiceStatus.partial) ...[
             const SizedBox(width: 12),
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: ElevatedButton.icon(
-                onPressed: () => _handleEdit(context),
-                icon: const Icon(Icons.edit, size: 18),
-                label: const Text('Edit Invoice'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
+               padding: const EdgeInsets.symmetric(vertical: 8.0),
+               child: ElevatedButton.icon(
+                 onPressed: () => _showSettleDialog(context),
+                 icon: const Icon(Icons.payment, size: 18),
+                 label: const Text('Settle Balance'),
+                 style: ElevatedButton.styleFrom(
+                   backgroundColor: Colors.green,
+                   foregroundColor: Colors.white,
+                   elevation: 0,
+                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                 ),
+               ),
             ),
           ],
+          
+
           const SizedBox(width: 8),
         ],
       ),
@@ -200,46 +203,44 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
             // RIGHT PANE: Summary Sidebar
             Expanded(
               flex: 2,
-              child: Column(
-                children: [
-                  _buildStatusBanner(),
-                  const SizedBox(height: 12),
-                  
-                  // Scrollable Middle Section (Customer + Details)
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        children: [
-                          _buildCard(
-                            title: 'Customer Details',
-                            icon: Icons.person_outline,
-                            child: _buildCustomerContent(customer),
-                          ),
-                          const SizedBox(height: 12),
-                          _buildCard(
-                            title: 'Invoice Details', 
-                            icon: Icons.receipt_long_outlined,
-                            child: _buildMetaContent(context),
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  // Fixed Bottom Section (Totals)
-                  _buildTotalsCard(),
-                  
-                  if (invoice.status == InvoiceStatus.cancelled) ...[
-                    const SizedBox(height: 12),
-                    _buildCancellationCard(),
-                  ]
-                ],
+              child: ScrollConfiguration(
+                 behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                 child: SingleChildScrollView(
+                   child: Column(
+                     children: [
+                       _buildStatusBanner(),
+                       const SizedBox(height: 12),
+                       
+                       _buildCard(
+                         title: 'Customer Details',
+                         icon: Icons.person_outline,
+                         child: _buildCustomerContent(customer),
+                       ),
+                       const SizedBox(height: 12),
+                         
+                       _buildCard(
+                           title: 'Invoice Details', 
+                           icon: Icons.receipt_long_outlined,
+                           child: _buildMetaContent(context),
+                       ),
+                       const SizedBox(height: 12),
+                         
+                       // Totals
+                       _buildTotalsCard(),
+                       
+                       if (invoice.status == InvoiceStatus.cancelled) ...[
+                           const SizedBox(height: 12),
+                           _buildCancellationCard(),
+                       ]
+                     ],
+                   ),
+                 ),
               ),
             ),
-          ],
+            ],
+          ),
         ),
-      ),
+
     );
   }
 
@@ -264,7 +265,22 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
         text = 'Invoice On Hold';
         icon = Icons.pause_circle_outline;
         break;
-    }
+      case InvoiceStatus.partial:
+        color = Colors.deepOrange;
+        text = 'Partially Paid';
+        icon = Icons.timelapse;
+        break;
+      case InvoiceStatus.completed:
+        color = Colors.green;
+        text = 'Completed (Paid)';
+        icon = Icons.check_circle;
+        break;
+      default: // Fallback
+        color = Colors.green;
+        text = 'Active Invoice';
+        icon = Icons.check_circle_outline;
+        break; // Added break
+    } // Added missing brace
 
     return Container(
       width: double.infinity,
@@ -354,6 +370,8 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
       children: [
         _buildMetaRow('Invoice #', invoice.invoiceNumber, isBold: true),
         _buildMetaRow('Type', invoice.type.name.toUpperCase()),
+        if (invoice.billType == 'ADVANCE')
+          _buildMetaRow('Bill Type', 'ADVANCE PAY', isBold: true),
         _buildMetaRow('Branch', branch?.name ?? 'Main Branch'),
         if (invoice.notes != null && invoice.notes!.isNotEmpty) ...[
           const Divider(),
@@ -436,7 +454,10 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
       child: Column(
         children: [
            _buildSummaryRow('Subtotal', invoice.subTotal),
-           _buildSummaryRow('Tax (GST)', invoice.taxAmount),
+           _buildSummaryRow(
+             invoice.items.any((i) => i.igst > 0) ? 'Tax (IGST)' : 'Tax (CGST+SGST)', 
+             invoice.taxAmount
+           ),
            _buildSummaryRow('Discount', invoice.discountAmount, isNegative: true),
            const Divider(height: 32),
            Row(
@@ -447,22 +468,54 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
              ],
            ),
            const SizedBox(height: 12),
-           Container(
-             width: double.infinity,
-             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-             decoration: BoxDecoration(
-               color: Colors.blue.shade50,
-               borderRadius: BorderRadius.circular(8),
-               border: Border.all(color: Colors.blue.shade100),
-             ),
-             child: Row(
-               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-               children: [
-                 const Text('Paid Via', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
-                 Text(invoice.paymentMode ?? 'CASH', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
-               ],
-             ),
-           ),
+           
+           // Paid / Balance Display
+            if (invoice.billType == 'ADVANCE' || invoice.balanceAmount > 0) ...[
+               const Divider(),
+               _buildSummaryRow('Paid Amount', invoice.paidAmount),
+               const SizedBox(height: 4),
+               Row(
+                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                 children: [
+                   const Text('Balance Due', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.deepOrange)),
+                   Text('₹${invoice.balanceAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Colors.deepOrange)),
+                 ],
+               ),
+               const SizedBox(height: 12),
+            ],
+
+           if (invoice.paymentMode == 'SPLIT' && invoice.payments.isNotEmpty) ...[
+               const SizedBox(height: 12),
+               const Text('Payment Breakdown', style: TextStyle(fontWeight: FontWeight.bold)),
+               const SizedBox(height: 8),
+               ...invoice.payments.map((p) => Padding(
+                 padding: const EdgeInsets.symmetric(vertical: 2),
+                 child: Row(
+                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                   children: [
+                     Text(p.mode, style: const TextStyle(color: Colors.grey)),
+                     Text('₹${p.amount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                   ],
+                 ),
+               )),
+           ] else ...[
+               Container(
+                 width: double.infinity,
+                 padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                 decoration: BoxDecoration(
+                   color: Colors.blue.shade50,
+                   borderRadius: BorderRadius.circular(8),
+                   border: Border.all(color: Colors.blue.shade100),
+                 ),
+                 child: Row(
+                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                   children: [
+                     const Text('Paid Via', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                     Text(invoice.paymentMode ?? 'CASH', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                   ],
+                 ),
+               ),
+           ],
 
            if (invoice.advanceAdjustedAmount > 0) ...[
              const SizedBox(height: 16),
@@ -765,14 +818,13 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
         screen = ProductInvoiceScreen(tabId: tabId, existingInvoice: invoice); 
         title = 'Edit Product Inv';
         break;
-      case InvoiceType.advance: 
-        screen = AdvancePaymentScreen(tabId: tabId, existingInvoice: invoice); 
-        title = 'Edit Advance';
-        break;
+
       case InvoiceType.membership: 
         screen = MembershipInvoiceScreen(tabId: tabId, existingInvoice: invoice); 
         title = 'Edit Membership';
         break;
+      default:
+        return; // Handle unknown or unsupported types
     }
 
     // Close details screen first? Or keep it open? 
@@ -798,8 +850,87 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     // DO NOT POP unless it was pushed to Navigator.
     // Since we are moving to Tabs, likely no Navigator.pop needed if we are in a TabView.
     // But if we accessed this screen via direct push, then pop is valid.
-    // Given the new architecture, let's just addTab.
-    // Navigator.pop(context); // Commented out to avoid popping the main shell if not needed
+  }
+
+  void _showSettleDialog(BuildContext context) {
+    final balance = invoice.balanceAmount;
+    final customers = context.read<POSProvider>().customers;
+    final customer = customers.isNotEmpty 
+        ? customers.firstWhere((c) => c.id == invoice.customerId, orElse: () => Customer(name: '', phone: '', email: '', address: '', createdAt: DateTime.now()))
+        : Customer(name: '', phone: '', email: '', address: '', createdAt: DateTime.now());
+    
+    final amountCtrl = TextEditingController(text: balance.toStringAsFixed(2));
+    String paymentMode = 'CASH';
+    bool useAdvance = false;
+    double advanceBal = customer.advanceBalance;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Settle Balance'),
+              content: SizedBox(
+                width: 400,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Total Balance Due: ₹${balance.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: amountCtrl,
+                      decoration: const InputDecoration(labelText: 'Amount to Pay', prefixText: '₹ '),
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: paymentMode,
+                      decoration: const InputDecoration(labelText: 'Payment Mode'),
+                      items: ['CASH', 'UPI', 'CARD'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                      onChanged: (val) => setState(() => paymentMode = val!),
+                    ),
+                    if (advanceBal > 0) ...[
+                      const SizedBox(height: 12),
+                      CheckboxListTile(
+                        value: useAdvance,
+                        title: Text('Adjust from Advance (Bal: ₹${advanceBal.toStringAsFixed(2)})'),
+                        onChanged: (val) => setState(() => useAdvance = val!),
+                        contentPadding: EdgeInsets.zero,
+                      )
+                    ]
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                ElevatedButton(
+                  onPressed: () async {
+                    final amt = double.tryParse(amountCtrl.text) ?? 0;
+                    // Allow small tolerance for float comparison or exact match
+                    if (amt <= 0 || amt > (balance + 0.01)) { 
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid Amount')));
+                      return;
+                    }
+                    
+                    try {
+                      await context.read<POSProvider>().settleInvoice(invoice.id!, amt, paymentMode, useAdvance: useAdvance);
+                      Navigator.pop(ctx);
+                      _loadInvoice(); // Reload to show updated status
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment Successful')));
+                    } catch (e) {
+                      Navigator.pop(ctx); // Close dialog to show snackbar on main screen
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                    }
+                  },
+                  child: const Text('Confirm Payment'),
+                )
+              ],
+            );
+          }
+        );
+      }
+    );
   }
 
   TabType _TypeToTabType(InvoiceType type) {

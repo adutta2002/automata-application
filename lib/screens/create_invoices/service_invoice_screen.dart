@@ -34,6 +34,11 @@ class _ServiceInvoiceScreenState extends State<ServiceInvoiceScreen> {
   late bool _isTaxInclusive;
   double _advanceAdjustedAmount = 0;
   String _paymentMode = 'CASH';
+  List<InvoicePayment> _payments = [];
+  
+  // Advance Invoice State
+  String _billType = 'REGULAR'; // 'REGULAR' or 'ADVANCE'
+  double _paidAmount = 0;
   
   DateTime _selectedDate = DateTime.now();
 
@@ -63,6 +68,10 @@ class _ServiceInvoiceScreenState extends State<ServiceInvoiceScreen> {
     _paymentMode = inv.paymentMode ?? 'CASH';
     _advanceAdjustedAmount = inv.advanceAdjustedAmount;
     _isBillDiscountPercentage = false;
+    
+    // Load Bill Type and Payment
+    _billType = inv.billType;
+    _paidAmount = inv.paidAmount;
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
        _calculateTotals();
@@ -113,25 +122,37 @@ class _ServiceInvoiceScreenState extends State<ServiceInvoiceScreen> {
     
     // Step 2: Calculate GST per HSN group
     _hsnBreakdown = {};
+    final provider = context.read<POSProvider>();
     
     for (var entry in hsnTotals.entries) {
       String hsn = entry.key;
       double hsnBaseTotal = entry.value;
       double gstRate = hsnGstRates[hsn] ?? 0;
       
-      double hsnTax = hsnBaseTotal * (gstRate / 100);
-      double cgst = hsnTax / 2;
-      double sgst = hsnTax / 2;
-      
-      tempTax += hsnTax;
+      // Use Provider Logic for Tax Split
+      final taxBreakdown = provider.calculateTaxBreakdown(
+        hsnCodeStr: hsn == 'NO_HSN' ? null : hsn,
+        taxableAmount: hsnBaseTotal,
+        customerId: _selectedCustomer?.id,
+        overrideLinkRate: gstRate
+      );
+
+      double cgst = taxBreakdown['cgst']!;
+      double sgst = taxBreakdown['sgst']!;
+      double igst = taxBreakdown['igst']!;
+      double totalTax = cgst + sgst + igst;
+      double effectiveRate = taxBreakdown['gstRate']!;
+
+      tempTax += totalTax;
       
       _hsnBreakdown[hsn] = HsnTaxBreakdown(
         hsnCode: hsn == 'NO_HSN' ? 'Others' : hsn,
         baseAmount: hsnBaseTotal,
-        gstRate: gstRate,
+        gstRate: effectiveRate,
         cgst: cgst,
         sgst: sgst,
-        totalTax: hsnTax,
+        igst: igst,
+        totalTax: totalTax,
       );
     }
     
@@ -163,7 +184,8 @@ class _ServiceInvoiceScreenState extends State<ServiceInvoiceScreen> {
         double proportion = hsnBaseTotal > 0 ? (itemBase / hsnBaseTotal) : 0;
         double itemCgst = breakdown.cgst * proportion;
         double itemSgst = breakdown.sgst * proportion;
-        double itemTax = itemCgst + itemSgst;
+        double itemIgst = breakdown.igst * proportion;
+        double itemTax = itemCgst + itemSgst + itemIgst;
         double itemTotal = itemBase + itemTax;
         
         updatedItems.add(InvoiceItem(
@@ -180,12 +202,12 @@ class _ServiceInvoiceScreenState extends State<ServiceInvoiceScreen> {
           gstRate: item.gstRate,
           cgst: itemCgst,
           sgst: itemSgst,
-          igst: 0,
+          igst: itemIgst,
         ));
       }
     }
     
-    // Sort updated items to match original order
+    // Sort updatedItems...
     updatedItems.sort((a, b) {
       int aIndex = _items.indexWhere((item) => item.itemId == a.itemId);
       int bIndex = _items.indexWhere((item) => item.itemId == b.itemId);
@@ -216,6 +238,17 @@ class _ServiceInvoiceScreenState extends State<ServiceInvoiceScreen> {
       }
     } else {
       _advanceAdjustedAmount = 0;
+    }
+    
+     // Update Paid Amount Default Logic
+    if (_billType == 'REGULAR') {
+      _paidAmount = _totalAmount - _advanceAdjustedAmount;
+    } else {
+      // For Advance, cap paid amount if total drops below it
+      double netTotal = _totalAmount - _advanceAdjustedAmount;
+      if (_paidAmount > netTotal) {
+        _paidAmount = netTotal;
+      }
     }
 
     setState(() {});
@@ -326,9 +359,12 @@ class _ServiceInvoiceScreenState extends State<ServiceInvoiceScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: _buildDateSelector(),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _buildBillTypeSelector(),
+                            _buildDateSelector(),
+                          ],
                         ),
                         const SizedBox(height: 16),
                         CustomerSelector(
@@ -362,9 +398,12 @@ class _ServiceInvoiceScreenState extends State<ServiceInvoiceScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                    children: [
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: _buildDateSelector(),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _buildBillTypeSelector(),
+                          _buildDateSelector(),
+                        ],
                       ),
                       const SizedBox(height: 16),
                       CustomerSelector(
@@ -392,6 +431,26 @@ class _ServiceInvoiceScreenState extends State<ServiceInvoiceScreen> {
       ),
     );
   }
+  
+  Widget _buildBillTypeSelector() {
+    return SegmentedButton<String>(
+      segments: const [
+        ButtonSegment(value: 'REGULAR', label: Text('Regular Bill'), icon: Icon(Icons.receipt)),
+        ButtonSegment(value: 'ADVANCE', label: Text('Advance Invoice'), icon: Icon(Icons.payments_outlined)),
+      ],
+      selected: {_billType},
+      onSelectionChanged: (Set<String> newSelection) {
+        setState(() {
+          _billType = newSelection.first;
+          _calculateTotals(); 
+        });
+      },
+      style: ButtonStyle(
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
 
   Widget _buildSummaryPane() {
     return InvoiceSummaryPane(
@@ -412,9 +471,25 @@ class _ServiceInvoiceScreenState extends State<ServiceInvoiceScreen> {
         });
         _calculateTotals();
       },
-      onPaymentModeChanged: (val) => setState(() => _paymentMode = val),
-      onSave: () => _submitInvoice(InvoiceStatus.active),
-      onHold: () => _submitInvoice(InvoiceStatus.hold),
+      onPaymentModeChanged: (val) {
+        setState(() {
+          _paymentMode = val;
+           if (val != 'SPLIT') {
+             _payments = [];
+           }
+        });
+      },
+      payments: _payments,
+      onPaymentsChanged: (val) => setState(() => _payments = val),
+      
+      // Advance Logic
+      billType: _billType,
+      onPaidAmountChanged: (val) {
+        setState(() => _paidAmount = val);
+      },
+      
+      onSave: () => _submitInvoice(null), // Null means calculate status automatically
+
       onDiscountChanged: (val, isPercentage) {
         setState(() {
           _billDiscountInput = val;
@@ -610,6 +685,8 @@ class _ServiceInvoiceScreenState extends State<ServiceInvoiceScreen> {
                 _advanceAdjustedAmount = 0;
                 _paymentMode = 'CASH';
                 _hsnBreakdown.clear();
+                _billType = 'REGULAR';
+                _paidAmount = 0;
               });
             },
             child: const Text('Yes, Clear'),
@@ -619,7 +696,7 @@ class _ServiceInvoiceScreenState extends State<ServiceInvoiceScreen> {
     );
   }
 
-  void _submitInvoice(InvoiceStatus status) async {
+  void _submitInvoice(InvoiceStatus? overrideStatus) async {
     if (_items.isEmpty) return;
 
     // Auto-create customer if needed
@@ -633,17 +710,42 @@ class _ServiceInvoiceScreenState extends State<ServiceInvoiceScreen> {
 
     final branchId = context.read<SettingsProvider>().currentBranchId;
 
+    // Determine Status
+    InvoiceStatus status = overrideStatus ?? InvoiceStatus.active;
+    if (overrideStatus == null) { // If not HOLD/CANCELLED explicitly
+        if (_billType == 'REGULAR') {
+          status = InvoiceStatus.completed; // Regular is always Completed (Paid)
+        } else { // ADVANCE
+          final netTotal = _totalAmount - _advanceAdjustedAmount;
+          // Tolerance for float issues
+          if (_paidAmount >= netTotal - 0.01) {
+            status = InvoiceStatus.completed;
+          } else {
+            status = InvoiceStatus.partial;
+          }
+        }
+    }
+    
+    final netTotal = _totalAmount - _advanceAdjustedAmount;
+    final balance = netTotal - _paidAmount;
+
     final invoice = Invoice(
       id: widget.existingInvoice?.id,
       invoiceNumber: widget.existingInvoice?.invoiceNumber ?? context.read<POSProvider>().generateInvoiceNumber(),
       customerId: _selectedCustomer?.id,
       branchId: branchId,
       type: InvoiceType.service,
+      billType: _billType, // NEW
       subTotal: _subTotal,
       taxAmount: _tax,
       discountAmount: _billDiscount,
       totalAmount: _totalAmount,
       advanceAdjustedAmount: _advanceAdjustedAmount,
+      paidAmount: _paidAmount, // NEW
+      balanceAmount: balance > 0 ? balance : 0, // NEW
+      payments: _payments.isNotEmpty 
+          ? _payments 
+          : [InvoicePayment(amount: _totalAmount, mode: _paymentMode)],
       paymentMode: _paymentMode,
       status: status,
       createdAt: _selectedDate,

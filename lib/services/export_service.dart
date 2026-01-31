@@ -269,6 +269,32 @@ class ExportService {
                   ),
                 ],
               ),
+              
+              if (invoice.balanceAmount > 0) ...[
+                pw.SizedBox(height: 4),
+                pw.Divider(borderStyle: pw.BorderStyle.dashed),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Paid Amount', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                    pw.Text(
+                      invoice.paidAmount.toStringAsFixed(2),
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                    ),
+                  ],
+                ),
+                pw.SizedBox(height: 2),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Balance Due', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                    pw.Text(
+                      invoice.balanceAmount.toStringAsFixed(2),
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ],
               pw.SizedBox(height: 4),
               
               // Separator
@@ -276,7 +302,17 @@ class ExportService {
               pw.SizedBox(height: 4),
               
               // Payment Mode
-              if (invoice.paymentMode != null) ...[
+              if (invoice.paymentMode == 'SPLIT' && invoice.payments.isNotEmpty) ...[
+                 pw.Text('Payment Breakdown', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                 ...invoice.payments.map((p) => pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                       pw.Text(p.mode, style: const pw.TextStyle(fontSize: 9)),
+                       pw.Text(p.amount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 9)),
+                    ],
+                 )),
+                 pw.SizedBox(height: 4),
+              ] else if (invoice.paymentMode != null) ...[
                 pw.Text(
                   'Payment: ${invoice.paymentMode}',
                   style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
@@ -313,6 +349,8 @@ class ExportService {
 
   pw.Widget _buildPdfTaxAnalysis(Invoice invoice) {
      Map<String, HsnTaxBreakdown> breakdownMap = {};
+     bool hasIgst = false;
+     bool hasCgst = false;
 
     for (var item in invoice.items) {
       double rate = item.rate;
@@ -325,8 +363,18 @@ class ExportService {
       
       double cgst = item.cgst;
       double sgst = item.sgst;
-      double itemTax = cgst + sgst;
+      double igst = item.igst;
+      double itemTax = cgst + sgst + igst;
+      
+      // Determine base (taxable) amount
+      // If inclusive, we subtract tax. If exclusive, it's just lineAmount.
+      // NOTE: The previous code did: itemBase = item.total - itemTax.
+      // That works if item.total is correct (Base + Tax).
+      // Let's stick to that as it's consistent for display.
       double itemBase = item.total - itemTax; 
+
+      if (igst > 0) hasIgst = true;
+      if (cgst > 0) hasCgst = true;
 
       String key;
       String label;
@@ -346,6 +394,7 @@ class ExportService {
           gstRate: gstPercent,
           cgst: 0,
           sgst: 0,
+          igst: 0,
           totalTax: 0,
         );
       }
@@ -357,6 +406,7 @@ class ExportService {
         gstRate: existing.gstRate,
         cgst: existing.cgst + cgst,
         sgst: existing.sgst + sgst,
+        igst: existing.igst + igst,
         totalTax: existing.totalTax + itemTax,
       );
     }
@@ -364,6 +414,22 @@ class ExportService {
     final sortedBreakdown = breakdownMap.values.toList()..sort((a, b) => a.hsnCode.compareTo(b.hsnCode));
 
     if (sortedBreakdown.isEmpty || invoice.taxAmount == 0) return pw.SizedBox();
+    
+    // Dynamic Columns
+    List<String> headers = ['HSN / Rate', 'Taxable Val'];
+    if (hasCgst) {
+      headers.addAll(['CGST', 'SGST']);
+    }
+    if (hasIgst) {
+      headers.add('IGST');
+    }
+    headers.add('Total Tax');
+    
+    // Cell Alignments (Auto-generate based on length)
+    Map<int, pw.Alignment> alignments = {0: pw.Alignment.centerLeft};
+    for(int i=1; i<headers.length; i++) {
+        alignments[i] = pw.Alignment.centerRight;
+    }
 
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -375,25 +441,25 @@ class ExportService {
           headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.grey800),
           cellStyle: const pw.TextStyle(fontSize: 8),
           headerDecoration: const pw.BoxDecoration(color: PdfColors.grey100),
-          cellAlignments: {
-            0: pw.Alignment.centerLeft,
-            1: pw.Alignment.centerRight,
-            2: pw.Alignment.centerRight,
-            3: pw.Alignment.centerRight,
-            4: pw.Alignment.centerRight,
-          },
-          data: <List<String>>[
-            <String>['HSN / Rate', 'Taxable Val', 'CGST', 'SGST', 'Total Tax'],
-            ...sortedBreakdown.map((bd) {
-              return [
-                bd.hsnCode,
-                bd.baseAmount.toStringAsFixed(2),
-                bd.cgst.toStringAsFixed(2),
-                bd.sgst.toStringAsFixed(2),
-                bd.totalTax.toStringAsFixed(2)
-              ];
-            })
-          ],
+          cellAlignments: alignments,
+          headers: headers,
+          data: sortedBreakdown.map((bd) {
+            List<String> row = [
+               bd.hsnCode,
+               bd.baseAmount.toStringAsFixed(2),
+            ];
+            
+            if (hasCgst) {
+               row.add(bd.cgst.toStringAsFixed(2));
+               row.add(bd.sgst.toStringAsFixed(2));
+            }
+            if (hasIgst) {
+               row.add(bd.igst.toStringAsFixed(2));
+            }
+            
+            row.add(bd.totalTax.toStringAsFixed(2));
+            return row;
+          }).toList(),
         )
       ]
     );
@@ -443,7 +509,10 @@ class ExportService {
              pw.Column(
                crossAxisAlignment: pw.CrossAxisAlignment.end,
                children: [
-                 pw.Text('TAX INVOICE', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                 pw.Text(
+                   invoice.balanceAmount > 0 ? 'ADVANCE INVOICE' : 'TAX INVOICE', 
+                   style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)
+                 ),
                  pw.Text('Invoice #: ${invoice.invoiceNumber}'),
                  pw.Text('Date: ${DateFormat('dd-MMM-yyyy').format(invoice.createdAt)}'),
                ]
@@ -485,15 +554,47 @@ class ExportService {
         pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.end,
           children: [
-             pw.Container(
-               width: 200,
-               child: pw.Column(
-                 children: [
-                   _pdfSummaryRow('Subtotal', invoice.subTotal),
-                   _pdfSummaryRow('Tax', invoice.taxAmount),
+               pw.Container(
+                 width: 200,
+                 child: pw.Column(
+                   children: [
+                     _pdfSummaryRow('Subtotal', invoice.subTotal),
+                     _pdfSummaryRow('Tax', invoice.taxAmount),
                    _pdfSummaryRow('Discount', invoice.discountAmount),
                    pw.Divider(),
                    _pdfSummaryRow('Total', invoice.totalAmount, isBold: true),
+                   
+                   // Conditional Display for Partial Invoices
+                   if (invoice.balanceAmount > 0) ...[
+                      pw.SizedBox(height: 4),
+                      pw.Divider(borderStyle: pw.BorderStyle.dashed),
+                      _pdfSummaryRow('Paid Amount', invoice.paidAmount, isBold: true),
+                      _pdfSummaryRow('Balance Due', invoice.balanceAmount, isBold: true),
+                      pw.SizedBox(height: 4),
+                   ],
+                   
+                   // Payment Mode
+                   if (invoice.paymentMode == 'SPLIT' && invoice.payments.isNotEmpty) ...[
+                      pw.SizedBox(height: 8),
+                      pw.Text('Payment Breakdown:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                      ...invoice.payments.map((p) => pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text(p.mode, style: const pw.TextStyle(fontSize: 10)),
+                          pw.Text('Rs. ${p.amount.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 10)),
+                        ],
+                      )),
+                   ] else ...[
+                      pw.SizedBox(height: 8),
+                      // Just append to column
+                      pw.Row(
+                         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                         children: [
+                            pw.Text('Paid Via', style: const pw.TextStyle(fontSize: 10)),
+                            pw.Text(invoice.paymentMode ?? 'CASH', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                         ]
+                      )
+                   ]
                  ],
                ),
              ),

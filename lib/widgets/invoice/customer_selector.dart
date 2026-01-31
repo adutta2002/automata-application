@@ -19,19 +19,22 @@ class CustomerSelector extends StatefulWidget {
 }
 
 class _CustomerSelectorState extends State<CustomerSelector> {
-  final _nameCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
+  // We need Controllers for Email/Address as they are simple text fields
   final _emailCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
 
-  // We keep track if the form is manually being edited to avoid overwriting invalid user input
-  // when the parent re-builds vs when we actively select a customer.
-  bool _isManuallyEditing = false;
+  // For Autocomplete, we manage the text via the provided controllers in fieldViewBuilder,
+  // but we store the current text to sync between fields if needed or to Create New.
+  String _currentName = '';
+  String _currentPhone = '';
+  
+  // To avoid recursive updates when selecting
+  bool _isInternalUpdate = false;
 
   @override
   void didUpdateWidget(covariant CustomerSelector oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.selectedCustomer != oldWidget.selectedCustomer && !_isManuallyEditing) {
+    if (widget.selectedCustomer != oldWidget.selectedCustomer && !_isInternalUpdate) {
       _populateForm(widget.selectedCustomer);
     }
   }
@@ -44,35 +47,59 @@ class _CustomerSelectorState extends State<CustomerSelector> {
 
   void _populateForm(Customer? c) {
     if (c != null) {
-      if (_nameCtrl.text != c.name) _nameCtrl.text = c.name;
-      if (_phoneCtrl.text != c.phone) _phoneCtrl.text = c.phone;
+      _currentName = c.name;
+      _currentPhone = c.phone;
       if (_emailCtrl.text != c.email) _emailCtrl.text = c.email;
       if (_addressCtrl.text != c.address) _addressCtrl.text = c.address;
     } else {
-      // Only clear if we are not manually editing, or force clear if needed?
-      // If parent explicitly sets to null, we should probably clear.
-      // But we need to distinguish "parent cleared" vs "initial state".
-      // Let's assume if the new selectedCustomer is NULL, we clear.
-      if (_nameCtrl.text.isNotEmpty) _nameCtrl.clear();
-      if (_phoneCtrl.text.isNotEmpty) _phoneCtrl.clear();
-      if (_emailCtrl.text.isNotEmpty) _emailCtrl.clear();
-      if (_addressCtrl.text.isNotEmpty) _addressCtrl.clear();
+      _currentName = '';
+      _currentPhone = '';
+      _emailCtrl.clear();
+      _addressCtrl.clear();
     }
+    // Note: Autocomplete text controllers are updated via key/rebuild or external control 
+    // but RawAutocomplete makes it hard to externally set text without a controller.
+    // For simplicity, we rely on the parent rebuilding this widget or Key based updates 
+    // if we really need to force reset. However, keeping it simple:
+    // If we receive a new customer from parent, we want the visible fields to update.
+    // The easiest way with standard Autocomplete is to use a unique Key when the external selection changes 
+    // if the selection is significantly different.
+    // Alternatively, we use TextEditingControllers for the Autocomplete fields too.
   }
 
-  void _onFormChanged() {
-    _isManuallyEditing = true;
-    final customer = Customer(
-      id: null, // Always treat manual edits as a new/unlinked customer entry
-      name: _nameCtrl.text,
-      phone: _phoneCtrl.text,
-      email: _emailCtrl.text,
-      address: _addressCtrl.text,
-      createdAt: DateTime.now(),
-    );
+  // Helper to notify parent of changes (treated as New/Manual Customer)
+  void _notifyChange({String? name, String? phone, String? email, String? address}) {
+    _isInternalUpdate = true; // Prevent internal loop
     
-    widget.onSelected(customer); 
-    _isManuallyEditing = false;
+    final newName = name ?? _currentName;
+    final newPhone = phone ?? _currentPhone;
+    final newEmail = email ?? _emailCtrl.text;
+    final newAddress = address ?? _addressCtrl.text;
+
+    // Update local state
+    _currentName = newName;
+    _currentPhone = newPhone;
+
+    widget.onSelected(Customer(
+      id: null, // New/Modified is always null ID until saved
+      name: newName,
+      phone: newPhone,
+      email: newEmail,
+      address: newAddress,
+      createdAt: DateTime.now(),
+    ));
+
+    _isInternalUpdate = false;
+  }
+
+  void _onCustomerSelected(Customer c) {
+    _isInternalUpdate = true;
+    _currentName = c.name;
+    _currentPhone = c.phone;
+    _emailCtrl.text = c.email;
+    _addressCtrl.text = c.address;
+    widget.onSelected(c); // Pass the EXISTING customer with ID
+    _isInternalUpdate = false;
   }
 
   @override
@@ -87,126 +114,181 @@ class _CustomerSelectorState extends State<CustomerSelector> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSearchField(),
-          const SizedBox(height: 16),
-          const Divider(),
-          const SizedBox(height: 16),
-          _buildForm(),
+          _buildHeader(),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _buildNameAutocomplete()),
+              const SizedBox(width: 12),
+              Expanded(child: _buildPhoneAutocomplete()),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _emailCtrl,
+                  decoration: const InputDecoration(labelText: 'Email', isDense: true, border: OutlineInputBorder()),
+                  onChanged: (val) => _notifyChange(email: val),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _addressCtrl,
+                  decoration: const InputDecoration(labelText: 'Address', isDense: true, border: OutlineInputBorder()),
+                  onChanged: (val) => _notifyChange(address: val),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildSearchField() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Autocomplete<Customer>(
-          optionsBuilder: (TextEditingValue textEditingValue) {
-            if (textEditingValue.text.isEmpty) {
-              return const Iterable<Customer>.empty();
-            }
-            final query = textEditingValue.text.toLowerCase();
-            return widget.customers.where((c) => 
-              c.name.toLowerCase().contains(query) || c.phone.contains(query)
-            );
-          },
-          displayStringForOption: (Customer option) => '${option.name} (${option.phone})',
-          onSelected: (Customer selection) {
-            _isManuallyEditing = false;
-            widget.onSelected(selection);
-            // Form is populated via didUpdateWidget -> _populateForm
-          },
-          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-            return TextField(
-              controller: controller,
-              focusNode: focusNode,
-              decoration: InputDecoration(
-                hintText: 'Search Customer by Name or Phone...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                filled: true,
-                fillColor: AppTheme.primaryColor.withOpacity(0.04),
-              ),
-            );
-          },
-          optionsViewBuilder: (context, onSelected, options) {
-            return Align(
-              alignment: Alignment.topLeft,
-              child: Material(
-                elevation: 4,
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  width: constraints.maxWidth,
-                  constraints: const BoxConstraints(maxHeight: 250),
-                  child: ListView.builder(
-                    padding: EdgeInsets.zero,
-                    itemCount: options.length,
-                    itemBuilder: (context, index) {
-                      final option = options.elementAt(index);
-                      return ListTile(
-                        title: Text(option.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text(option.phone),
-                        onTap: () => onSelected(option),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
+  Widget _buildHeader() {
+     return Row(
+       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+       children: [
+         const Text('Customer Details', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+         if (widget.selectedCustomer?.id != null)
+           Container(
+             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+             decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(4)),
+             child: const Text('Existing', style: TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold)),
+           )
+         else if (_currentName.isNotEmpty || _currentPhone.isNotEmpty)
+            Container(
+             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+             decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(4)),
+             child: const Text('New / Unsaved', style: TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold)),
+           ),
+       ],
+     );
   }
 
-  Widget _buildForm() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Customer Details', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _nameCtrl,
-                decoration: const InputDecoration(labelText: 'Name', isDense: true, border: OutlineInputBorder()),
-                onChanged: (_) => _onFormChanged(),
+  Widget _buildNameAutocomplete() {
+    return LayoutBuilder(builder: (context, constraints) {
+      return RawAutocomplete<Customer>(
+        key: ValueKey('Name_${widget.selectedCustomer?.id ?? "new"}'), // Reset when selection changes externally
+        initialValue: TextEditingValue(text: _currentName),
+        optionsBuilder: (TextEditingValue textEditingValue) {
+          if (textEditingValue.text.isEmpty) return const Iterable<Customer>.empty();
+          return widget.customers.where((c) => c.name.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+        },
+        displayStringForOption: (Customer option) => option.name,
+        onSelected: _onCustomerSelected,
+        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+          // Sync controller with state if initialValue didn't catch it
+          if (controller.text != _currentName && !_isInternalUpdate) {
+             controller.text = _currentName;
+          }
+          return TextField(
+            controller: controller,
+            focusNode: focusNode,
+            decoration: const InputDecoration(
+              labelText: 'Name',
+              hintText: 'Search or Enter Name',
+              isDense: true,
+              border: OutlineInputBorder(),
+              suffixIcon: Icon(Icons.search, size: 16),
+            ),
+            onChanged: (val) {
+               _notifyChange(name: val);
+            },
+          );
+        },
+        optionsViewBuilder: (context, onSelected, options) {
+          return Align(
+            alignment: Alignment.topLeft,
+            child: Material(
+              elevation: 4,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: constraints.maxWidth,
+                constraints: const BoxConstraints(maxHeight: 200),
+                child: ListView.builder(
+                  padding: EdgeInsets.zero,
+                  itemCount: options.length,
+                  itemBuilder: (context, index) {
+                    final option = options.elementAt(index);
+                    return ListTile(
+                      dense: true,
+                      title: Text(option.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text(option.phone),
+                      onTap: () => onSelected(option),
+                    );
+                  },
+                ),
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextField(
-                controller: _phoneCtrl,
-                decoration: const InputDecoration(labelText: 'Phone', isDense: true, border: OutlineInputBorder()),
-                keyboardType: TextInputType.phone,
-                onChanged: (_) => _onFormChanged(),
+          );
+        },
+      );
+    });
+  }
+
+  Widget _buildPhoneAutocomplete() {
+    return LayoutBuilder(builder: (context, constraints) {
+      return RawAutocomplete<Customer>(
+        key: ValueKey('Phone_${widget.selectedCustomer?.id ?? "new"}'),
+        initialValue: TextEditingValue(text: _currentPhone),
+        optionsBuilder: (TextEditingValue textEditingValue) {
+          if (textEditingValue.text.isEmpty) return const Iterable<Customer>.empty();
+          return widget.customers.where((c) => c.phone.contains(textEditingValue.text));
+        },
+        displayStringForOption: (Customer option) => option.phone,
+        onSelected: _onCustomerSelected,
+        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+           if (controller.text != _currentPhone && !_isInternalUpdate) {
+             controller.text = _currentPhone;
+          }
+          return TextField(
+            controller: controller,
+            focusNode: focusNode,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              labelText: 'Phone', 
+              hintText: 'Search or Enter Phone',
+              isDense: true, 
+              border: OutlineInputBorder(),
+              suffixIcon: Icon(Icons.phone, size: 16),
+            ),
+            onChanged: (val) {
+               _notifyChange(phone: val);
+            },
+          );
+        },
+        optionsViewBuilder: (context, onSelected, options) {
+          return Align(
+            alignment: Alignment.topLeft,
+            child: Material(
+              elevation: 4,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: constraints.maxWidth,
+                constraints: const BoxConstraints(maxHeight: 200),
+                child: ListView.builder(
+                  padding: EdgeInsets.zero,
+                  itemCount: options.length,
+                  itemBuilder: (context, index) {
+                    final option = options.elementAt(index);
+                    return ListTile(
+                      dense: true,
+                      title: Text(option.phone, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text(option.name),
+                      onTap: () => onSelected(option),
+                    );
+                  },
+                ),
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _emailCtrl,
-                decoration: const InputDecoration(labelText: 'Email', isDense: true, border: OutlineInputBorder()),
-                 onChanged: (_) => _onFormChanged(),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextField(
-                controller: _addressCtrl,
-                decoration: const InputDecoration(labelText: 'Address', isDense: true, border: OutlineInputBorder()),
-                 onChanged: (_) => _onFormChanged(),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
+          );
+        },
+      );
+    });
   }
 }

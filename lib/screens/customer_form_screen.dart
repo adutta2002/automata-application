@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/pos_models.dart';
 import '../providers/pos_provider.dart';
+import '../utils/validators.dart';
 import '../core/app_theme.dart';
 
 class CustomerFormDialog extends StatefulWidget {
@@ -22,9 +23,19 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
   late TextEditingController _dobController;
   late TextEditingController _doaController;
   String? _gender;
+  String? _selectedState;
   DateTime? _dob;
   DateTime? _doa;
   bool _isEdit = false;
+
+  final List<String> _indianStates = [
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 
+    'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 
+    'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 
+    'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 
+    'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu', 
+    'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
+  ];
 
   @override
   void initState() {
@@ -37,6 +48,7 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
     _dob = widget.customer?.dob;
     _doa = widget.customer?.doa;
     _gender = widget.customer?.gender;
+    _selectedState = widget.customer?.state;
     _dobController = TextEditingController(text: _dob != null ? _dob!.toIso8601String().split('T')[0] : '');
     _doaController = TextEditingController(text: _doa != null ? _doa!.toIso8601String().split('T')[0] : '');
   }
@@ -65,6 +77,7 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
       gender: _gender,
       dob: _dob,
       doa: _doa,
+      state: _selectedState,
     );
 
     try {
@@ -125,7 +138,7 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
                             border: OutlineInputBorder(),
                             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                           ),
-                          validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+                          validator: Validators.required,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -142,7 +155,7 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
                                   border: OutlineInputBorder(),
                                   contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                                 ),
-                                validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+                                validator: Validators.phone,
                               ),
                             ),
                           ),
@@ -158,6 +171,7 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
                                   border: OutlineInputBorder(),
                                   contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                                 ),
+                                validator: Validators.email,
                               ),
                             ),
                           ),
@@ -266,6 +280,20 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
                             ),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 16),
+                      _buildField(
+                        label: 'State (for Tax Calculation)',
+                        child: DropdownButtonFormField<String>(
+                          value: _selectedState,
+                          decoration: const InputDecoration(
+                            hintText: 'Select State',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          ),
+                          items: _indianStates.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                          onChanged: (val) => setState(() => _selectedState = val),
+                        ),
                       ),
                     ],
                   ),

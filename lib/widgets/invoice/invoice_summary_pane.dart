@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/pos_models.dart';
 import '../../core/app_theme.dart';
+import 'split_payment_dialog.dart';
 
 class InvoiceSummaryPane extends StatefulWidget {
   final Customer? selectedCustomer;
@@ -21,6 +22,12 @@ class InvoiceSummaryPane extends StatefulWidget {
   final bool isDiscountPercentage;
   final String paymentMode;
   final Function(String) onPaymentModeChanged;
+  final String billType; // 'REGULAR' or 'ADVANCE'
+  final Function(double)? onPaidAmountChanged;
+  
+  // Multiple Payments
+  final List<InvoicePayment> payments;
+  final Function(List<InvoicePayment>)? onPaymentsChanged;
 
   const InvoiceSummaryPane({
     super.key,
@@ -42,10 +49,11 @@ class InvoiceSummaryPane extends StatefulWidget {
     this.onAdvanceAdjusted,
     this.paymentMode = 'CASH',
     required this.onPaymentModeChanged,
-    this.onHold,
+    this.billType = 'REGULAR',
+    this.onPaidAmountChanged,
+    this.payments = const [],
+    this.onPaymentsChanged,
   });
-
-  final VoidCallback? onHold;
 
   @override
   State<InvoiceSummaryPane> createState() => _InvoiceSummaryPaneState();
@@ -53,12 +61,15 @@ class InvoiceSummaryPane extends StatefulWidget {
 
 class _InvoiceSummaryPaneState extends State<InvoiceSummaryPane> {
   final _discountCtrl = TextEditingController();
+  final _paidAmountCtrl = TextEditingController();
+  double _currentPaidAmount = 0;
   bool _isPercentage = false;
 
   @override
   void initState() {
     super.initState();
     _discountCtrl.text = '0';
+    _paidAmountCtrl.text = '0.00';
   }
 
   @override
@@ -70,12 +81,70 @@ class _InvoiceSummaryPaneState extends State<InvoiceSummaryPane> {
           _isPercentage = widget.isDiscountPercentage;
        }
     }
+
+    // Auto-update Paid Amount for REGULAR Bill Type or if logic demands
+    final total = widget.subTotal + widget.tax - widget.discount - widget.advanceAdjustedAmount;
+    
+    if (widget.billType == 'REGULAR') {
+      // For Regular, Paid Amount is always Total
+      if (_currentPaidAmount != total) {
+        _currentPaidAmount = total;
+        _paidAmountCtrl.text = total.toStringAsFixed(2);
+        if (widget.onPaidAmountChanged != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+             if (mounted) widget.onPaidAmountChanged!(total);
+          });
+        }
+      }
+    } else {
+      // For Advance, we default to total if user hasn't messed with it, 
+      // OR if the total changed and exceeds current paid (rare, but good safety)
+      // Actually, standard behavior: When switching to Advance, if Paid was Total, keep it Total?
+      // Let's just ensure it doesn't exceed total.
+      if (_currentPaidAmount > total) {
+        _currentPaidAmount = total;
+        _paidAmountCtrl.text = total.toStringAsFixed(2);
+         if (widget.onPaidAmountChanged != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+             if (mounted) widget.onPaidAmountChanged!(total);
+          });
+        }
+      }
+      // If it's 0 (init), set to total
+      if (_currentPaidAmount == 0 && total > 0 && oldWidget.subTotal == 0) { // Fresh init
+         _currentPaidAmount = total;
+        _paidAmountCtrl.text = total.toStringAsFixed(2);
+         if (widget.onPaidAmountChanged != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+             if (mounted) widget.onPaidAmountChanged!(total);
+          });
+        }
+      }
+    }
   }
   
+  void _updatePaidAmount(String val) {
+    double v = double.tryParse(val) ?? 0;
+    final total = widget.subTotal + widget.tax - widget.discount - widget.advanceAdjustedAmount;
+    
+    if (v > total) {
+      v = total; // Cap at total
+      // We perform the text update in the frame to avoid loop issues, theoretically
+      // unique handling required for text field curser? 
+      // For now, let's just use the value. Updating controller text while typing is annoying.
+    }
+    
+    setState(() {
+      _currentPaidAmount = v;
+    });
+    if (widget.onPaidAmountChanged != null) widget.onPaidAmountChanged!(v);
+  }
+
   @override
   Widget build(BuildContext context) {
     // Total calculation: Subtotal - BillDiscount + Tax - AdvanceAdjustment
     final total = widget.subTotal + widget.tax - widget.discount - widget.advanceAdjustedAmount;
+    final balance = total - _currentPaidAmount;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -240,12 +309,19 @@ class _InvoiceSummaryPaneState extends State<InvoiceSummaryPane> {
         
         if (widget.taxBreakdown != null && widget.taxBreakdown!.isNotEmpty) ...[
           ...widget.taxBreakdown!.map((bd) {
+            String label = bd.hsnCode;
+            if (bd.igst > 0) {
+              label += ' (IGST)';
+            } else if (bd.cgst > 0 || bd.sgst > 0) {
+              label += ' (CGST+SGST)';
+            }
+            
             return Padding(
               padding: const EdgeInsets.only(bottom: 8.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('${bd.hsnCode}', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                  Text(label, style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
                   Text(
                     '₹${bd.totalTax.toStringAsFixed(2)}',
                     style: TextStyle(fontSize: 13, color: Colors.grey.shade800, fontWeight: FontWeight.w500),
@@ -269,18 +345,63 @@ class _InvoiceSummaryPaneState extends State<InvoiceSummaryPane> {
           children: [
             const Padding(
               padding: EdgeInsets.only(bottom: 4.0),
-              child: Text('Total', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              child: Text('Total Amount', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             ),
             Text(
               '₹${total.toStringAsFixed(2)}',
               style: const TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF5C5CFF), // Bright Blue-Purple from screenshot
+                color: Color(0xFF5C5CFF), 
               ),
             ),
           ],
         ),
+
+        // Paid Amount & Balance (Visible for ADVANCE bill type)
+        const SizedBox(height: 24),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+             const Text('Paid Amount', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+             SizedBox(
+               width: 150,
+               child: TextField(
+                 controller: _paidAmountCtrl,
+                 enabled: widget.billType == 'ADVANCE', // Only editable if Advance
+                 keyboardType: TextInputType.number,
+                 textAlign: TextAlign.right,
+                 style: TextStyle(
+                   fontSize: 18, 
+                   fontWeight: FontWeight.bold,
+                   color: widget.billType == 'ADVANCE' ? Colors.black : Colors.grey.shade700
+                 ),
+                 decoration: InputDecoration(
+                   prefixText: '₹ ',
+                   filled: widget.billType == 'ADVANCE',
+                   fillColor: Colors.white,
+                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                 ),
+                 onChanged: _updatePaidAmount,
+               ),
+             ),
+          ],
+        ),
+        
+        if (balance > 0.01) ...[ // Show balance only if there is a balance
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+               const Text('Balance Due', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.red)),
+               Text(
+                 '₹${balance.toStringAsFixed(2)}',
+                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.red),
+               )
+            ],
+          ),
+        ],
 
         const SizedBox(height: 24),
         
@@ -294,8 +415,34 @@ class _InvoiceSummaryPaneState extends State<InvoiceSummaryPane> {
             _buildPaymentModeChip('UPI', Icons.qr_code),
             const SizedBox(width: 8),
             _buildPaymentModeChip('CARD', Icons.credit_card),
+            const SizedBox(width: 8),
+            _buildSplitPaymentChip(),
           ],
         ),
+        if (widget.paymentMode == 'SPLIT' && widget.payments.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Container(
+             padding: const EdgeInsets.all(8),
+             decoration: BoxDecoration(
+               color: Colors.grey.shade100,
+               borderRadius: BorderRadius.circular(8),
+               border: Border.all(color: Colors.grey.shade300),
+             ),
+             child: Column(
+               crossAxisAlignment: CrossAxisAlignment.start,
+               children: widget.payments.map((p) => Padding(
+                 padding: const EdgeInsets.symmetric(vertical: 2),
+                 child: Row(
+                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                   children: [
+                     Text(p.mode, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                     Text('₹${p.amount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
+                   ],
+                 ),
+               )).toList(),
+             ),
+          ),
+        ],
 
         const SizedBox(height: 24),
         
@@ -304,20 +451,6 @@ class _InvoiceSummaryPaneState extends State<InvoiceSummaryPane> {
         Row(
           children: [
             Expanded(
-              child: OutlinedButton(
-                onPressed: widget.isReady ? widget.onHold : null,
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  side: BorderSide(color: Colors.orange.shade700),
-                  foregroundColor: Colors.orange.shade800,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text('HOLD INVOICE', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              flex: 2,
               child: ElevatedButton(
                 onPressed: widget.isReady ? widget.onSave : null,
                 style: ElevatedButton.styleFrom(
@@ -424,5 +557,63 @@ class _InvoiceSummaryPaneState extends State<InvoiceSummaryPane> {
         ),
       ),
     );
+  }
+  Widget _buildSplitPaymentChip() {
+    final isSelected = widget.paymentMode == 'SPLIT';
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+             if (isSelected) {
+               _handleSplitPayment(); // Edit existing split
+             } else {
+               _handleSplitPayment(); // Start new split
+             }
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: isSelected ? AppTheme.primaryColor : Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: isSelected ? AppTheme.primaryColor : Colors.grey.shade300),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.call_split, size: 20, color: isSelected ? Colors.white : AppTheme.primaryColor),
+                const SizedBox(height: 4),
+                Text(
+                  'SPLIT',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: isSelected ? Colors.white : AppTheme.primaryColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _handleSplitPayment() async {
+     // Calculate total expected
+     final total = widget.subTotal + widget.tax - widget.discount - widget.advanceAdjustedAmount;
+     
+     final results = await showDialog<List<InvoicePayment>>(
+       context: context,
+       builder: (context) => SplitPaymentDialog(
+         totalAmount: total,
+         initialPayments: widget.paymentMode == 'SPLIT' ? widget.payments : [],
+       ),
+     );
+
+     if (results != null && widget.onPaymentsChanged != null) {
+       widget.onPaymentsChanged!(results);
+       widget.onPaymentModeChanged('SPLIT');
+     }
   }
 }

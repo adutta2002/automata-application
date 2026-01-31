@@ -86,7 +86,10 @@ class POSProvider extends ChangeNotifier {
     final itemMaps = await db.query('invoice_items', where: 'invoice_id = ?', whereArgs: [id]);
     final items = itemMaps.map((im) => InvoiceItem.fromMap(im)).toList();
     
-    return Invoice.fromMap(map, items: items);
+    final paymentMaps = await db.query('invoice_payments', where: 'invoice_id = ?', whereArgs: [id]);
+    final payments = paymentMaps.map((pm) => InvoicePayment.fromMap(pm)).toList();
+    
+    return Invoice.fromMap(map, items: items, payments: payments);
   }
 
   Future<void> searchInvoices(String query) async {
@@ -328,6 +331,14 @@ class POSProvider extends ChangeNotifier {
         }
       }
 
+      // Insert Payments
+      for (var payment in invoice.payments) {
+        await txn.insert('invoice_payments', {
+          ...payment.toMap(),
+          'invoice_id': invoiceId,
+        });
+      }
+
       // Handle Membership Activation
       if (invoice.type == InvoiceType.membership && invoice.customerId != null) {
         // ... (existing membership logic remains same) ...
@@ -472,6 +483,11 @@ class POSProvider extends ChangeNotifier {
   Future<void> cancelInvoice(int invoiceId, String reason) async {
     final db = await _dbHelper.database;
     await db.transaction((txn) async {
+       // Fetch invoice details first to check for advance adjustment
+      final invRes = await txn.query('invoices', where: 'id = ?', whereArgs: [invoiceId]);
+      if (invRes.isEmpty) return;
+      final inv = Invoice.fromMap(invRes.first);
+
       await txn.update(
         'invoices',
         {'status': 'CANCELLED', 'cancellation_reason': reason},
@@ -489,9 +505,28 @@ class POSProvider extends ChangeNotifier {
           );
         }
       }
+      
+      // Restore Advance Balance if used
+      if (inv.customerId != null && inv.advanceAdjustedAmount > 0) {
+          await txn.rawUpdate(
+            'UPDATE customers SET advance_balance = advance_balance + ? WHERE id = ?',
+            [inv.advanceAdjustedAmount, inv.customerId],
+          );
+      }
+      
+      // If it was a legacy Advance Receipt (InvoiceType.advance), we might need to revert the CREDIT it gave?
+      // Logic: If I paid 500 advance (Credit), and now I cancel it, I shouldn't have that 500 credit anymore.
+      if (inv.type == InvoiceType.advance && inv.customerId != null) {
+          await txn.rawUpdate(
+            'UPDATE customers SET advance_balance = advance_balance - ? WHERE id = ?',
+            [inv.totalAmount, inv.customerId],
+          );
+      }
     });
+
     await loadInitialData();
   }
+
 
   // --- Product/Service Management ---
 
@@ -575,6 +610,59 @@ class POSProvider extends ChangeNotifier {
   Future<void> deleteCustomer(int id) async {
     final db = await _dbHelper.database;
     await db.delete('customers', where: 'id = ?', whereArgs: [id]);
+    await loadInitialData();
+  }
+
+  // --- Settle Invoice (Partial -> Completed) ---
+  Future<void> settleInvoice(int invoiceId, double amount, String paymentMode, {bool useAdvance = false}) async {
+    final db = await _dbHelper.database;
+    await db.transaction((txn) async {
+        final invRes = await txn.query('invoices', where: 'id = ?', whereArgs: [invoiceId]);
+        if (invRes.isEmpty) throw Exception('Invoice not found');
+        
+        final inv = Invoice.fromMap(invRes.first);
+        final newPaid = inv.paidAmount + amount;
+        final newBalance = inv.totalAmount - newPaid; 
+        // Tolerance for float
+        final status = (newBalance <= 0.01) ? InvoiceStatus.completed : InvoiceStatus.partial;
+        
+        double advanceAdj = inv.advanceAdjustedAmount;
+
+        // Handle Payment
+        if (useAdvance && inv.customerId != null) {
+           // check balance
+           final custRes = await txn.query('customers', columns: ['advance_balance'], where: 'id = ?', whereArgs: [inv.customerId]);
+           final currentBal = (custRes.first['advance_balance'] as num).toDouble();
+           
+           if (currentBal < amount) throw Exception('Insufficient Advance Balance');
+           
+           // Deduct from Customer
+           await txn.rawUpdate(
+             'UPDATE customers SET advance_balance = advance_balance - ? WHERE id = ?',
+             [amount, inv.customerId],
+           );
+           
+           advanceAdj += amount;
+        }
+        
+        // Update Invoice
+        await txn.update(
+          'invoices', 
+          {
+            'paid_amount': newPaid,
+            'balance_amount': newBalance > 0 ? newBalance : 0,
+            'status': status.name.toUpperCase(),
+            'advance_adjusted_amount': advanceAdj, // Update total advance used if applicable
+            // Append payment mode if different? Or just keep original? 
+            // Usually we might want a payment log table, but for now we update the main record.
+            // If settled via multiple modes, it might be ambiguous. 
+            // For now, if settled fully, maybe update mode? Or leave as is if mixed.
+          },
+          where: 'id = ?',
+          whereArgs: [invoiceId]
+        );
+    });
+    
     await loadInitialData();
   }
 
@@ -694,5 +782,101 @@ class POSProvider extends ChangeNotifier {
     });
 
     await loadInitialData();
+  }
+
+  // --- Tax Calculation Helper ---
+  
+  Map<String, double> calculateTaxBreakdown({
+    required String? hsnCodeStr, 
+    required double taxableAmount, 
+    required int? customerId,
+    double? overrideLinkRate // For cases where HSN is not found but we have a rate (e.g. Service with direct rate)
+  }) {
+    // 1. Identify Rates
+    double cgstRate = 0;
+    double sgstRate = 0;
+    double igstRate = 0;
+    
+    HsnCode? hsn;
+    if (hsnCodeStr != null) {
+      try {
+        hsn = _hsnCodes.firstWhere((h) => h.code == hsnCodeStr);
+      } catch (_) {}
+    }
+
+    if (hsn != null) {
+      cgstRate = hsn.cgstRate;
+      sgstRate = hsn.sgstRate;
+      igstRate = hsn.igstRate;
+      
+      // Fallback if specific rates are 0 but total is set
+      if (igstRate == 0 && hsn.gstRate > 0) igstRate = hsn.gstRate;
+      if ((cgstRate + sgstRate) == 0 && hsn.gstRate > 0) {
+        cgstRate = hsn.gstRate / 2;
+        sgstRate = hsn.gstRate / 2;
+      }
+    } else if (overrideLinkRate != null) {
+      // Fallback for non-HSN linked items (legacy)
+      // Defaulting to split if no HSN found? Or should we check overrideLinkRate vs IGST? 
+      // Safe to assume legacy behavior: 50/50 split for INTRA, Full for INTER.
+      // We set the "Rate" here, decision for IGST/CGST happens below.
+      igstRate = overrideLinkRate;
+      cgstRate = overrideLinkRate / 2;
+      sgstRate = overrideLinkRate / 2;
+    }
+
+    // 2. Determine Place of Supply (Intra vs Inter)
+    bool isInterState = false;
+    
+    String? branchState;
+    try {
+        final activeBranch = _branches.firstWhere((b) => b.isActive, orElse: () => _branches.first);
+        branchState = activeBranch.state;
+    } catch (_) {}
+
+    String? customerState;
+    if (customerId != null) {
+      try {
+        final cust = _customers.firstWhere((c) => c.id == customerId);
+        customerState = cust.state;
+      } catch (_) {}
+    }
+
+    // Logic: If both states exist and are different -> INTER. Otherwise INTRA.
+    if (branchState != null && 
+        customerState != null && 
+        branchState.isNotEmpty && 
+        customerState.isNotEmpty && 
+        branchState.trim().toLowerCase() != customerState.trim().toLowerCase()) {
+      isInterState = true;
+    }
+
+    // 3. Calculate Amounts
+    double cgstAmt = 0;
+    double sgstAmt = 0;
+    double igstAmt = 0;
+    double gstRateUsed = 0;
+
+    if (isInterState) {
+      // IGST
+      gstRateUsed = igstRate;
+      igstAmt = (taxableAmount * igstRate) / 100;
+    } else {
+      // CGST + SGST
+      gstRateUsed = cgstRate + sgstRate;
+      cgstAmt = (taxableAmount * cgstRate) / 100;
+      sgstAmt = (taxableAmount * sgstRate) / 100;
+    }
+
+    return {
+      'cgst': cgstAmt,
+      'sgst': sgstAmt,
+      'igst': igstAmt,
+      'gstRate': gstRateUsed, // The total effective rate used
+      // Return used rates for reference if needed
+      'cgstRate': isInterState ? 0 : cgstRate,
+      'sgstRate': isInterState ? 0 : sgstRate,
+      'igstRate': isInterState ? igstRate : 0,
+    };
   }
 }

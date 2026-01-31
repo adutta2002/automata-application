@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/user.dart';
 import '../providers/user_provider.dart';
+import '../utils/validators.dart';
 import '../core/app_theme.dart';
 
 class UserFormDialog extends StatefulWidget {
@@ -120,7 +121,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
                              border: OutlineInputBorder(),
                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                            ),
-                           validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+                           validator: Validators.required,
                          ),
                        ),
                        const SizedBox(height: 16),
@@ -133,7 +134,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
                              border: OutlineInputBorder(),
                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                            ),
-                           validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+                           validator: Validators.username,
                          ),
                        ),
                        const SizedBox(height: 16),
@@ -170,7 +171,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
                                  ),
                                  validator: (val) {
                                    if (!_isEdit && (val == null || val.isEmpty)) return 'Required';
-                                   if (val != null && val.isNotEmpty && val.length < 6) return 'Mini 6 chars';
+                                   if (val != null && val.isNotEmpty) return Validators.minLength(val, 6);
                                    return null;
                                  },
                                ),

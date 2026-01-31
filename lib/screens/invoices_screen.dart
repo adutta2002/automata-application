@@ -8,7 +8,7 @@ import '../models/pos_models.dart';
 import '../core/app_theme.dart';
 import 'create_invoices/service_invoice_screen.dart';
 import 'create_invoices/product_invoice_screen.dart';
-import 'create_invoices/advance_invoice_screen.dart';
+
 import 'create_invoices/membership_invoice_screen.dart';
 import 'invoice_details_screen.dart';
 import '../providers/settings_provider.dart';
@@ -77,7 +77,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
             children: [
               _buildFilterButton(),
               const SizedBox(width: 16),
-              _buildNewInvoiceMenu(context),
+              _buildInvoiceActionButtons(context),
             ],
           ),
         ],
@@ -195,7 +195,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                   DropdownButtonFormField<String>(
                     value: tempStatus,
                     decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12)),
-                    items: ['ALL', 'ACTIVE', 'CANCELLED', 'HOLD']
+                    items: ['ALL', 'ACTIVE', 'CANCELLED']
                         .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                         .toList(),
                     onChanged: (val) => setState(() => tempStatus = val!),
@@ -331,65 +331,58 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     );
   }
 
-  Widget _buildNewInvoiceMenu(BuildContext context) {
-    return PopupMenuButton<InvoiceType>(
-      position: PopupMenuPosition.under,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppTheme.primaryColor,
+  Widget _buildInvoiceActionButtons(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildActionButton(
+          context,
+          label: 'Product',
+          icon: Icons.shopping_bag_outlined,
+          color: Colors.green,
+          onPressed: () => _navigateToCreateScreen(context, InvoiceType.product),
+        ),
+        const SizedBox(width: 8),
+        _buildActionButton(
+          context,
+          label: 'Service',
+          icon: Icons.build_outlined,
+          color: Colors.blue,
+          onPressed: () => _navigateToCreateScreen(context, InvoiceType.service),
+        ),
+        const SizedBox(width: 8),
+        _buildActionButton(
+          context,
+          label: 'Membership',
+          icon: Icons.card_membership_outlined,
+          color: Colors.purple,
+          onPressed: () => _navigateToCreateScreen(context, InvoiceType.membership),
+        ),
+
+      ],
+    );
+  }
+
+  Widget _buildActionButton(
+    BuildContext context, {
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 18),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        elevation: 0,
+        shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
         ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.add, size: 18, color: Colors.white),
-            SizedBox(width: 8),
-            Text(
-              'New Invoice',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
       ),
-      onSelected: (type) => _navigateToCreateScreen(context, type),
-      itemBuilder: (context) => [
-        const PopupMenuItem(
-          value: InvoiceType.service, 
-          child: ListTile(
-            leading: Icon(Icons.build_outlined, size: 20), 
-            title: Text('Service Invoice'),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-        const PopupMenuItem(
-          value: InvoiceType.product, 
-          child: ListTile(
-            leading: Icon(Icons.shopping_bag_outlined, size: 20), 
-            title: Text('Product Invoice'),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-        const PopupMenuItem(
-          value: InvoiceType.advance, 
-          child: ListTile(
-            leading: Icon(Icons.payments_outlined, size: 20), 
-            title: Text('Advance Payment'),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-        const PopupMenuItem(
-          value: InvoiceType.membership, 
-          child: ListTile(
-            leading: Icon(Icons.card_membership_outlined, size: 20), 
-            title: Text('Membership Invoice'),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-      ],
     );
   }
 
@@ -766,6 +759,14 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         color = Colors.orange;
         text = 'ON HOLD';
         break;
+      case InvoiceStatus.partial:
+        color = Colors.deepOrange;
+        text = 'PARTIAL';
+        break;
+      case InvoiceStatus.completed:
+        color = Colors.green;
+        text = 'COMPLETED';
+        break;
     }
 
     return Container(
@@ -800,14 +801,13 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         screen = ProductInvoiceScreen(tabId: tabId); 
         title = 'Product Inv';
         break;
-      case InvoiceType.advance: 
-        screen = AdvancePaymentScreen(tabId: tabId); 
-        title = 'Advance Pmt';
-        break;
+
       case InvoiceType.membership: 
         screen = MembershipInvoiceScreen(tabId: tabId); 
         title = 'Membership';
         break;
+      case InvoiceType.advance:
+        return; // No longer supported via this button
     }
 
     context.read<TabProvider>().addTab(
@@ -824,8 +824,9 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     switch (type) {
       case InvoiceType.service: return TabType.serviceInvoice;
       case InvoiceType.product: return TabType.productInvoice;
-      case InvoiceType.advance: return TabType.advance;
+
       case InvoiceType.membership: return TabType.membership;
+      default: return TabType.invoices;
     }
   }
 
