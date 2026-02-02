@@ -58,15 +58,11 @@ class _SalesSummaryReportState extends State<SalesSummaryReport> {
 
   @override
   Widget build(BuildContext context) {
-    // In a dialog, we might want a constrained size or just let it fit content
+    // In a dialog, the parent handles size constraints
     return Container(
-      width: 900, // Fixed width for the report dialog
-      height: 700,
+      color: AppTheme.backgroundColor,
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppTheme.backgroundColor,
-        borderRadius: BorderRadius.circular(12),
-      ),
+
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

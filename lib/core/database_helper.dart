@@ -36,7 +36,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 19,
+      version: 20,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -172,6 +172,10 @@ class DatabaseHelper {
         code TEXT UNIQUE NOT NULL,
         description TEXT,
         gst_rate REAL DEFAULT 0,
+        cgst_rate REAL DEFAULT 0,
+        sgst_rate REAL DEFAULT 0,
+        igst_rate REAL DEFAULT 0,
+        cess_rate REAL DEFAULT 0,
         type TEXT DEFAULT 'GOODS',
         effective_from TEXT,
         effective_to TEXT
@@ -378,6 +382,14 @@ class DatabaseHelper {
       // Version 19: State field for IGST Logic
       try { await db.execute("ALTER TABLE branches ADD COLUMN state TEXT"); } catch (_) {}
       try { await db.execute("ALTER TABLE customers ADD COLUMN state TEXT"); } catch (_) {}
+    }
+
+    if (oldVersion < 20) {
+      // Version 20: Recover missing HSN columns for users who installed on bugged v19
+      try { await db.execute("ALTER TABLE hsn_master ADD COLUMN cgst_rate REAL DEFAULT 0"); } catch (_) {}
+      try { await db.execute("ALTER TABLE hsn_master ADD COLUMN sgst_rate REAL DEFAULT 0"); } catch (_) {}
+      try { await db.execute("ALTER TABLE hsn_master ADD COLUMN igst_rate REAL DEFAULT 0"); } catch (_) {}
+      try { await db.execute("ALTER TABLE hsn_master ADD COLUMN cess_rate REAL DEFAULT 0"); } catch (_) {}
     }
   }
 

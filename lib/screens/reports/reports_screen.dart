@@ -19,53 +19,56 @@ class ReportsScreen extends StatelessWidget {
             const Text(
               'Admin Reports',
               style: TextStyle(
-                fontSize: 24,
+                fontSize: 28,
                 fontWeight: FontWeight.bold,
                 color: AppTheme.textColor,
               ),
             ),
+            const SizedBox(height: 8),
+            Text(
+              'View performance, customer activity, and inventory status.',
+              style: TextStyle(fontSize: 16, color: AppTheme.mutedTextColor),
+            ),
             const SizedBox(height: 32),
             LayoutBuilder(
               builder: (context, constraints) {
-                // Determine grid count based on width
-                int crossAxisCount = 1;
-                if (constraints.maxWidth > 1200) crossAxisCount = 4;
-                else if (constraints.maxWidth > 800) crossAxisCount = 3;
-                else if (constraints.maxWidth > 600) crossAxisCount = 2;
-
-                return GridView.count(
+                // Responsive Grid using MaxCrossAxisExtent
+                return GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: crossAxisCount,
-                  crossAxisSpacing: 24,
-                  mainAxisSpacing: 24,
-                  childAspectRatio: 1.5,
-                  children: [
-                    _buildReportCard(
-                      context,
-                      'Customer Activity',
-                      'Detailed analysis of customer visits, spend, and purchase history.',
-                      Icons.person_search_outlined,
-                      Colors.blue,
-                      () => _showReportDialog(context, const CustomerActivityReport()),
-                    ),
-                     _buildReportCard(
-                      context,
-                      'Sales Summary',
-                      'General sales performance overview by period and category.',
-                      Icons.insert_chart_outlined,
-                      Colors.green,
-                      () => _showReportDialog(context, const SalesSummaryReport()),
-                    ),
-                     _buildReportCard(
-                      context,
-                      'Inventory Status',
-                      'Stock levels, low stock alerts, and valuation.',
-                      Icons.inventory_2_outlined,
-                      Colors.orange,
-                      () => _showReportDialog(context, const InventoryStatusReport()),
-                    ),
-                  ],
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 400, // Max width for each card
+                    childAspectRatio: 1.4,
+                    crossAxisSpacing: 24,
+                    mainAxisSpacing: 24,
+                  ),
+                  itemCount: 3,
+                  itemBuilder: (context, index) {
+                    final reports = [
+                       _buildReportModel(
+                        'Customer Activity',
+                        'Detailed analysis of customer visits, spend, and purchase history.',
+                        Icons.person_search_outlined,
+                        Colors.blue,
+                        () => _showReportDialog(context, const CustomerActivityReport()),
+                      ),
+                       _buildReportModel(
+                        'Sales Summary',
+                        'General sales performance overview by period and category.',
+                        Icons.insert_chart_outlined,
+                        Colors.green,
+                        () => _showReportDialog(context, const SalesSummaryReport()),
+                      ),
+                       _buildReportModel(
+                        'Inventory Status',
+                        'Stock levels, low stock alerts, and valuation.',
+                        Icons.inventory_2_outlined,
+                        Colors.orange,
+                        () => _showReportDialog(context, const InventoryStatusReport()),
+                      ),
+                    ];
+                    return _buildReportCard(context, reports[index]);
+                  },
                 );
               },
             ),
@@ -76,25 +79,45 @@ class ReportsScreen extends StatelessWidget {
   }
 
   void _showReportDialog(BuildContext context, Widget reportWidget) {
+    final size = MediaQuery.of(context).size;
+    final double dialogWidth = size.width > 1100 ? 1000 : size.width * 0.9;
+    final double dialogHeight = size.height > 900 ? 800 : size.height * 0.9;
+
     showDialog(
       context: context,
       barrierDismissible: true,
       builder: (context) {
         return Dialog(
           backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.all(24),
-          child: reportWidget, // Reports already wrapped in Container for size control or will adapt
+          insetPadding: EdgeInsets.zero, // We handle size manually
+          child: SizedBox(
+            width: dialogWidth,
+            height: dialogHeight,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: reportWidget,
+            ),
+          ),
         );
       },
     );
   }
 
-  Widget _buildReportCard(BuildContext context, String title, String description, IconData icon, Color color, VoidCallback onTap) {
+  _ReportData _buildReportModel(String title, String desc, IconData icon, Color color, VoidCallback onTap) {
+    return _ReportData(title, desc, icon, color, onTap);
+  }
+
+  Widget _buildReportCard(BuildContext context, _ReportData data) {
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
       child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        hoverColor: color.withOpacity(0.05),
+        onTap: data.onTap,
+        borderRadius: BorderRadius.circular(16),
+        hoverColor: data.color.withOpacity(0.04),
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -103,16 +126,16 @@ class ReportsScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: data.color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: color, size: 32),
+                child: Icon(data.icon, color: data.color, size: 32),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               Text(
-                title,
+                data.title,
                 style: const TextStyle(
-                  fontSize: 18,
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
                   color: AppTheme.textColor,
                 ),
@@ -120,28 +143,28 @@ class ReportsScreen extends StatelessWidget {
               const SizedBox(height: 8),
               Expanded(
                 child: Text(
-                  description,
+                  data.description,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 14,
                     color: AppTheme.mutedTextColor,
-                    height: 1.4,
+                    height: 1.5,
                   ),
                   overflow: TextOverflow.fade,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               Row(
                 children: [
                   Text(
                     'View Report',
                     style: TextStyle(
-                      color: color,
+                      color: data.color,
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  Icon(Icons.arrow_forward, size: 16, color: color),
+                  const SizedBox(width: 8),
+                  Icon(Icons.arrow_forward_rounded, size: 16, color: data.color),
                 ],
               ),
             ],
@@ -150,4 +173,14 @@ class ReportsScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ReportData {
+  final String title;
+  final String description;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  _ReportData(this.title, this.description, this.icon, this.color, this.onTap);
 }

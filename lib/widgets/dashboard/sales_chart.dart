@@ -80,7 +80,7 @@ class _SalesChartState extends State<SalesChart> {
     }
 
     for (var invoice in invoices) {
-      if (invoice.status != InvoiceStatus.active) continue;
+      if (invoice.status == InvoiceStatus.cancelled || invoice.status == InvoiceStatus.hold) continue;
       
       final invoiceDate = DateTime(invoice.createdAt.year, invoice.createdAt.month, invoice.createdAt.day);
       if (invoiceDate.isAfter(today.subtract(const Duration(days: 7))) && 
@@ -187,7 +187,7 @@ class _SalesChartState extends State<SalesChart> {
     }
 
     for (var invoice in invoices) {
-       if (invoice.status != InvoiceStatus.active) continue;
+       if (invoice.status == InvoiceStatus.cancelled || invoice.status == InvoiceStatus.hold) continue;
        final key = DateFormat('MMM-yyyy').format(invoice.createdAt);
        if (dataMap.containsKey(key)) {
          dataMap[key] = (dataMap[key] ?? 0) + invoice.totalAmount;

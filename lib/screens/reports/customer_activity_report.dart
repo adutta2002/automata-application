@@ -45,13 +45,8 @@ class _CustomerActivityReportState extends State<CustomerActivityReport> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 900,
-      height: 700,
+      color: AppTheme.backgroundColor,
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppTheme.backgroundColor,
-        borderRadius: BorderRadius.circular(12),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

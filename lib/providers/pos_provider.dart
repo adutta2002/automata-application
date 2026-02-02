@@ -128,22 +128,23 @@ class POSProvider extends ChangeNotifier {
     final end = to.toIso8601String();
     
     // Optimized: Calculate Totals via SQL Aggregation
+    // Include ACTIVE, PARTIAL, COMPLETED. Exclude CANCELLED, HOLD.
     final totalsResult = await db.rawQuery('''
       SELECT 
         SUM(total_amount) as total_revenue,
         SUM(tax_amount) as total_tax,
         SUM(discount_amount) as total_discount
       FROM invoices 
-      WHERE status = 'ACTIVE' AND created_at BETWEEN ? AND ?
+      WHERE status IN ('ACTIVE', 'PARTIAL', 'COMPLETED') AND created_at BETWEEN ? AND ?
     ''', [start, end]);
     
     final totals = totalsResult.first;
     
-    // Still fetch list for the chart and table, but now we have fast totals
+    // Still fetch list for the chart and table
     final results = await db.query(
       'invoices',
-      where: 'status = ? AND created_at BETWEEN ? AND ?',
-      whereArgs: ['ACTIVE', start, end],
+      where: "status IN ('ACTIVE', 'PARTIAL', 'COMPLETED') AND created_at BETWEEN ? AND ?",
+      whereArgs: [start, end],
       orderBy: 'created_at ASC'
     );
     
@@ -165,8 +166,10 @@ class POSProvider extends ChangeNotifier {
   Future<List<Invoice>> getCustomerActivity(int customerId, DateTime? from, DateTime? to) async {
     final db = await _dbHelper.database;
     
-    String whereClause = 'customer_id = ? AND status = ?';
-    List<dynamic> whereArgs = [customerId, 'ACTIVE'];
+    // Allow seeing history regardless of status (except CANCELLED and HOLD)
+    // We want to show valid sales/visits.
+    String whereClause = "customer_id = ? AND status IN ('ACTIVE', 'PARTIAL', 'COMPLETED')";
+    List<dynamic> whereArgs = [customerId];
     
     if (from != null && to != null) {
       whereClause += ' AND created_at BETWEEN ? AND ?';
@@ -183,12 +186,6 @@ class POSProvider extends ChangeNotifier {
     
     List<Invoice> activityInvoices = [];
     for (var map in results) {
-      // For activity report we likely want items to see what they bought?
-      // The UI shows "Total Spend" and "Avg Basket". 
-      // It also shows "Transaction History" list which opens details.
-      // It ALSO shows "Purchase Distribution" (Service vs Product). For that we NEED items (or at least types).
-      
-      // Let's load items to be safe and correct.
       final itemMaps = await db.query('invoice_items', where: 'invoice_id = ?', whereArgs: [map['id']]);
       final items = itemMaps.map((im) => InvoiceItem.fromMap(im)).toList();
       activityInvoices.add(Invoice.fromMap(map, items: items));
@@ -202,26 +199,26 @@ class POSProvider extends ChangeNotifier {
   Future<Map<String, dynamic>> getDashboardStats() async {
     final db = await _dbHelper.database;
     
-    // 1. Total Revenue (Active Invoices)
-    final revenueRes = await db.rawQuery("SELECT SUM(total_amount) as total FROM invoices WHERE status = 'ACTIVE'");
+    // 1. Total Revenue (Sales) - Include ACTIVE, PARTIAL, COMPLETED
+    final revenueRes = await db.rawQuery("SELECT SUM(total_amount) as total FROM invoices WHERE status IN ('ACTIVE', 'PARTIAL', 'COMPLETED')");
     final totalRevenue = (revenueRes.first['total'] ?? 0.0) as double;
 
-    // 2. Total Invoices (Active)
-    final countRes = await db.rawQuery("SELECT COUNT(*) as count FROM invoices WHERE status = 'ACTIVE'");
+    // 2. Total Invoices - Include ACTIVE, PARTIAL, COMPLETED
+    final countRes = await db.rawQuery("SELECT COUNT(*) as count FROM invoices WHERE status IN ('ACTIVE', 'PARTIAL', 'COMPLETED')");
     final totalInvoices = (countRes.first['count'] ?? 0) as int;
 
     // 3. Active Memberships
-    // Logic: Invoices of type MEMBERSHIP that are ACTIVE? Or Customers with valid membership?
-    // Dashboard logic was: Invoices where type=MEMBERSHIP AND status=ACTIVE
-    final membershipRes = await db.rawQuery("SELECT COUNT(*) as count FROM invoices WHERE type = 'MEMBERSHIP' AND status = 'ACTIVE'");
+    // Logic: Customers with membership_expiry > NOW
+    final nowStr = DateTime.now().toIso8601String();
+    final membershipRes = await db.rawQuery("SELECT COUNT(*) as count FROM customers WHERE membership_expiry > ?", [nowStr]);
     final activeMemberships = (membershipRes.first['count'] ?? 0) as int;
 
     // 4. Low Stock Items
     final stockRes = await db.rawQuery("SELECT COUNT(*) as count FROM products WHERE stock_quantity < 10");
     final lowStockItems = (stockRes.first['count'] ?? 0) as int;
 
-    // 5. Recent Invoices (Last 5)
-    final recentMaps = await db.query('invoices', orderBy: 'created_at DESC', limit: 5);
+    // 5. Recent Invoices (Last 5) - Exclude Cancelled
+    final recentMaps = await db.query('invoices', where: "status != 'CANCELLED'", orderBy: 'created_at DESC', limit: 5);
     final recentInvoices = recentMaps.map((m) => Invoice.fromMap(m, items: [])).toList();
 
     return {
