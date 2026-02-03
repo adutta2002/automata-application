@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'package:csv/csv.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -56,6 +59,103 @@ class _SalesSummaryReportState extends State<SalesSummaryReport> {
     }
   }
 
+  Future<void> _exportToCsv() async {
+    try {
+      final invoices = _reportData;
+      if (invoices.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No data to export')));
+        return;
+      }
+
+      // 1. Prepare Data
+      List<List<dynamic>> rows = [];
+      
+      // Header
+      rows.add([
+        'Date',
+        'Total Invoices',
+        'Service Sales',
+        'Product Sales',
+        'Membership Sales',
+        'Gross Revenue',
+        'Discount', // Added Discount
+        'Tax (GST)',
+        'Net Sales (Profit)'
+      ]);
+
+      // Group by Date
+      final Map<DateTime, List<Invoice>> grouped = {};
+      for (var i in invoices) {
+        final date = DateTime(i.createdAt.year, i.createdAt.month, i.createdAt.day);
+        if (!grouped.containsKey(date)) grouped[date] = [];
+        grouped[date]!.add(i);
+      }
+      final sortedDates = grouped.keys.toList()..sort((a,b) => b.compareTo(a));
+
+      for (var date in sortedDates) {
+        final daysInvoices = grouped[date]!;
+        
+        double serviceSales = 0;
+        double productSales = 0;
+        double membershipSales = 0;
+        double totalRevenue = 0;
+        double totalTax = 0;
+        double totalDiscount = 0; // Track Discount
+
+        for (var inv in daysInvoices) {
+          if (inv.status == InvoiceStatus.cancelled || inv.status == InvoiceStatus.hold) continue;
+          
+          totalRevenue += inv.totalAmount;
+          totalTax += inv.taxAmount;
+          totalDiscount += inv.discountAmount; // Sum discount
+
+          if (inv.type == InvoiceType.service) serviceSales += inv.totalAmount;
+          else if (inv.type == InvoiceType.product) productSales += inv.totalAmount;
+          else if (inv.type == InvoiceType.membership) membershipSales += inv.totalAmount;
+          else {
+             productSales += inv.totalAmount;
+          }
+        }
+        
+        final netSales = totalRevenue - totalTax;
+
+        rows.add([
+          DateFormat('yyyy-MM-dd').format(date),
+          daysInvoices.length,
+          serviceSales.toStringAsFixed(2),
+          productSales.toStringAsFixed(2),
+          membershipSales.toStringAsFixed(2),
+          totalRevenue.toStringAsFixed(2),
+          totalDiscount.toStringAsFixed(2), // Add Discount
+          totalTax.toStringAsFixed(2),
+          netSales.toStringAsFixed(2),
+        ]);
+      }
+
+      // Convert to CSV
+      String csvData = const ListToCsvConverter().convert(rows);
+
+      // Save File
+      String? outputFile = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Report CSV',
+        fileName: 'sales_summary_${DateFormat('yyyyMMdd').format(_dateFrom!)}-${DateFormat('yyyyMMdd').format(_dateTo!)}.csv',
+      );
+
+      if (outputFile != null) {
+        final file = File(outputFile);
+        await file.writeAsString(csvData);
+        if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Report saved to $outputFile')));
+        }
+      }
+    } catch (e) {
+      debugPrint('Export Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // In a dialog, the parent handles size constraints
@@ -99,10 +199,20 @@ class _SalesSummaryReportState extends State<SalesSummaryReport> {
           'Sales Summary Report',
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
-        IconButton(
-          onPressed: () => Navigator.pop(context),
-          icon: const Icon(Icons.close),
-          tooltip: 'Close',
+        Row(
+          children: [
+             OutlinedButton.icon(
+              onPressed: _exportToCsv,
+              icon: const Icon(Icons.download),
+              label: const Text('Export CSV'),
+            ),
+            const SizedBox(width: 16),
+            IconButton(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.close),
+              tooltip: 'Close',
+            ),
+          ],
         ),
       ],
     );
@@ -312,8 +422,13 @@ class _SalesSummaryReportState extends State<SalesSummaryReport> {
             child: const Row(
               children: [
                 Expanded(flex: 2, child: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
-                Expanded(child: Text('Invoices', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-                Expanded(child: Text('Revenue', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+                Expanded(child: Text('Service', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+                Expanded(child: Text('Product', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+                Expanded(child: Text('Member', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)), // Added Membership
+                Expanded(child: Text('GST', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+                Expanded(child: Text('Disc.', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)), // Added Discount
+                Expanded(child: Text('Net', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+                Expanded(child: Text('Total', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
               ],
             ),
           ),
@@ -325,15 +440,55 @@ class _SalesSummaryReportState extends State<SalesSummaryReport> {
             itemBuilder: (context, index) {
               final date = sortedDates[index];
               final daysInvoices = grouped[date]!;
-              final dailyRevenue = daysInvoices.fold(0.0, (sum, i) => sum + i.totalAmount);
+              
+              double serviceSales = 0;
+              double productSales = 0;
+              double membershipSales = 0; // Track Membership
+              double totalRevenue = 0;
+              double totalTax = 0;
+              double totalDiscount = 0; // Track Discount
+              
+              for (var inv in daysInvoices) {
+                if (inv.status == InvoiceStatus.cancelled || inv.status == InvoiceStatus.hold) continue;
+                
+                totalRevenue += inv.totalAmount;
+                totalTax += inv.taxAmount;
+                totalDiscount += inv.discountAmount; // Sum discounts
+                
+                // Classify based on invoice type
+                if (inv.type == InvoiceType.service) {
+                  serviceSales += inv.totalAmount;
+                } else if (inv.type == InvoiceType.product) {
+                  productSales += inv.totalAmount;
+                } else if (inv.type == InvoiceType.membership) {
+                   membershipSales += inv.totalAmount;
+                } else {
+                   // Fallback for others
+                   productSales += inv.totalAmount;
+                }
+              }
+              
+              // Net Sales = Revenue - Tax
+              final netSales = totalRevenue - totalTax;
               
               return Padding(
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
-                    Expanded(flex: 2, child: Text(DateFormat('dd MMM yyyy').format(date))),
-                    Expanded(child: Text(daysInvoices.length.toString(), textAlign: TextAlign.center)),
-                    Expanded(child: Text('₹${NumberFormat('#,##,###.##').format(dailyRevenue)}', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold))),
+                    Expanded(flex: 2, child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(DateFormat('dd MMM yyyy').format(date), style: const TextStyle(fontWeight: FontWeight.w500)),
+                        Text('${daysInvoices.length} invoices', style: TextStyle(fontSize: 11, color: AppTheme.mutedTextColor)),
+                      ],
+                    )),
+                    Expanded(child: Text('₹${NumberFormat('#,##,##0.00').format(serviceSales)}', textAlign: TextAlign.right, style: TextStyle(color: AppTheme.mutedTextColor))),
+                    Expanded(child: Text('₹${NumberFormat('#,##,##0.00').format(productSales)}', textAlign: TextAlign.right, style: TextStyle(color: AppTheme.mutedTextColor))),
+                    Expanded(child: Text('₹${NumberFormat('#,##,##0.00').format(membershipSales)}', textAlign: TextAlign.right, style: TextStyle(color: AppTheme.mutedTextColor))),
+                    Expanded(child: Text('₹${NumberFormat('#,##,##0.00').format(totalTax)}', textAlign: TextAlign.right, style: TextStyle(color: Colors.red.shade400))),
+                    Expanded(child: Text('₹${NumberFormat('#,##,##0.00').format(totalDiscount)}', textAlign: TextAlign.right, style: TextStyle(color: Colors.orange.shade400))), // Discount
+                    Expanded(child: Text('₹${NumberFormat('#,##,##0.00').format(netSales)}', textAlign: TextAlign.right, style: TextStyle(color: Colors.green.shade600, fontWeight: FontWeight.bold))),
+                    Expanded(child: Text('₹${NumberFormat('#,##,##0.00').format(totalRevenue)}', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold))),
                   ],
                 ),
               );

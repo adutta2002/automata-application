@@ -5,7 +5,7 @@ import '../providers/pos_provider.dart';
 import '../core/app_theme.dart';
 import '../models/pos_models.dart';
 import '../core/responsive_layout.dart';
-import '../widgets/dashboard/sales_chart.dart';
+
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -48,16 +48,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Dashboard'),
-        actions: [
-          IconButton(
-            onPressed: _loadData,
-            icon: const Icon(Icons.refresh),
-          ),
-          const SizedBox(width: 16),
-        ],
-      ),
+      // App Bar removed as Sync is now in Sidebar
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator()) 
         : SingleChildScrollView(
@@ -77,25 +68,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 // Adaptive layout for Chart & Recent Invoices
                 LayoutBuilder(
                   builder: (context, constraints) {
-                    // Using ResponsiveLayout breakdown or custom check here
-                    if (constraints.maxWidth >= 900) {
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(flex: 2, child: const SalesChart()),
-                          const SizedBox(width: 24),
-                          Expanded(flex: 1, child: _buildRecentInvoices()),
-                        ],
-                      );
-                    } else {
-                      return Column(
-                        children: [
-                          const SalesChart(),
-                          const SizedBox(height: 24),
-                          _buildRecentInvoices(),
-                        ],
-                      );
-                    }
+                    // Responsive recent invoices
+                    return _buildRecentInvoices(); 
                   },
                 ),
               ],

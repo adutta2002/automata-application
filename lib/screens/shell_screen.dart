@@ -435,6 +435,8 @@ class _ShellScreenState extends State<ShellScreen> {
           
           const SizedBox(height: 16),
           // Logout remains at bottom
+          _buildSyncButton(context),
+          const SizedBox(height: 12),
           _buildLogoutButton(context),
           const SizedBox(height: 20),
         ],
@@ -508,6 +510,60 @@ class _ShellScreenState extends State<ShellScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSyncButton(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () async {
+            // Show loading indicator
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (ctx) => const Center(child: CircularProgressIndicator()),
+            );
+            
+            // Perform Sync
+            await context.read<POSProvider>().loadInitialData();
+            
+            // Close loading
+            if (context.mounted) {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Data Synced Successfully!'), duration: Duration(seconds: 1)),
+              );
+            }
+          },
+          borderRadius: BorderRadius.circular(10),
+          hoverColor: AppTheme.primaryColor.withOpacity(0.05),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.blue.withOpacity(0.2)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.sync, color: Colors.blue, size: 20),
+                const SizedBox(width: 12),
+                const Text(
+                  'Sync Data',
+                  style: TextStyle(
+                    color: Colors.blue,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

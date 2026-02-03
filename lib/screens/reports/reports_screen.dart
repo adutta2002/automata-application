@@ -5,6 +5,8 @@ import 'sales_summary_report.dart';
 import 'inventory_status_report.dart';
 import 'day_end_report.dart';
 
+import '../../widgets/dashboard/sales_chart.dart';
+
 class ReportsScreen extends StatelessWidget {
   const ReportsScreen({super.key});
 
@@ -31,6 +33,11 @@ class ReportsScreen extends StatelessWidget {
               style: TextStyle(fontSize: 16, color: AppTheme.mutedTextColor),
             ),
             const SizedBox(height: 32),
+            
+            // Moved Sales Chart here
+            const SalesChart(),
+            const SizedBox(height: 32),
+
             LayoutBuilder(
               builder: (context, constraints) {
                 // Responsive Grid using MaxCrossAxisExtent
