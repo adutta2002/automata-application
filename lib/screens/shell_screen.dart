@@ -408,31 +408,33 @@ class _ShellScreenState extends State<ShellScreen> {
                 children: [
                   _buildNavItem(context, 'dashboard', Icons.dashboard_outlined, 'Dashboard', const DashboardScreen(), TabType.dashboard),
                   _buildNavItem(context, 'invoices', Icons.receipt_long_outlined, 'Invoices', const InvoicesScreen(), TabType.dashboard),
-                  _buildNavItem(context, 'inventory', Icons.inventory_2_outlined, 'Products', const InventoryScreen(), TabType.dashboard),
-                  _buildNavItem(context, 'services', Icons.miscellaneous_services_outlined, 'Services', const ServiceManagementScreen(), TabType.dashboard),
                   _buildNavItem(context, 'customers', Icons.people_outline, 'Customers', const CustomersScreen(), TabType.dashboard),
 
+                  // Admin Items merged into main list
+                   if (authProvider.isAdmin) ...[
+                     const SizedBox(height: 24), // Subtle spacing instead of divider
+                     Padding(
+                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                       child: Align(
+                         alignment: Alignment.centerLeft,
+                         child: Text('ADMINISTRATION', style: TextStyle(color: AppTheme.mutedTextColor, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
+                       ),
+                     ),
+                    _buildNavItem(context, 'inventory', Icons.inventory_2_outlined, 'Products', const InventoryScreen(), TabType.dashboard),
+                    _buildNavItem(context, 'services', Icons.miscellaneous_services_outlined, 'Services', const ServiceManagementScreen(), TabType.dashboard),
+                    _buildNavItem(context, 'users', Icons.people_alt_outlined, 'Users', const UserManagementScreen(), TabType.dashboard),
+                    _buildNavItem(context, 'memberships', Icons.card_membership_outlined, 'Memberships', const MembershipPlansScreen(), TabType.membership),
+                    _buildNavItem(context, 'hsn', Icons.numbers, 'HSN Master', const HsnManagementScreen(), TabType.dashboard),
+                    _buildNavItem(context, 'reports', Icons.bar_chart_outlined, 'Reports', const ReportsScreen(), TabType.dashboard),
+                    _buildNavItem(context, 'settings', Icons.settings_outlined, 'Settings', const SettingsScreen(), TabType.dashboard),
+                  ],
                 ],
               ),
             ),
           ),
           
           const SizedBox(height: 16),
-          Divider(color: AppTheme.sidebarBorderColor, height: 1),
-          const SizedBox(height: 8),
-
-          // Admin Management Section
-          if (authProvider.isAdmin) ...[
-            _buildNavItem(context, 'users', Icons.people_alt_outlined, 'Users', const UserManagementScreen(), TabType.dashboard),
-            _buildNavItem(context, 'memberships', Icons.card_membership_outlined, 'Memberships', const MembershipPlansScreen(), TabType.membership),
-            _buildNavItem(context, 'hsn', Icons.numbers, 'HSN Master', const HsnManagementScreen(), TabType.dashboard),
-            _buildNavItem(context, 'reports', Icons.bar_chart_outlined, 'Reports', const ReportsScreen(), TabType.dashboard),
-            const SizedBox(height: 8),
-            Divider(color: AppTheme.sidebarBorderColor, height: 1),
-            const SizedBox(height: 8),
-            _buildNavItem(context, 'settings', Icons.settings_outlined, 'Settings', const SettingsScreen(), TabType.dashboard),
-            const SizedBox(height: 8),
-          ],
+          // Logout remains at bottom
           _buildLogoutButton(context),
           const SizedBox(height: 20),
         ],
