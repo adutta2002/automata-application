@@ -3,6 +3,7 @@ import '../../core/app_theme.dart';
 import 'customer_activity_report.dart';
 import 'sales_summary_report.dart';
 import 'inventory_status_report.dart';
+import 'day_end_report.dart';
 
 class ReportsScreen extends StatelessWidget {
   const ReportsScreen({super.key});
@@ -42,9 +43,16 @@ class ReportsScreen extends StatelessWidget {
                     crossAxisSpacing: 24,
                     mainAxisSpacing: 24,
                   ),
-                  itemCount: 3,
+                  itemCount: 4,
                   itemBuilder: (context, index) {
                     final reports = [
+                       _buildReportModel(
+                        'Day End / Closing',
+                        'Daily sales closing, cash collection, and payment breakdown.',
+                        Icons.today_outlined,
+                        Colors.purple,
+                        () => _showReportDialog(context, const DayEndReport()),
+                      ),
                        _buildReportModel(
                         'Customer Activity',
                         'Detailed analysis of customer visits, spend, and purchase history.',

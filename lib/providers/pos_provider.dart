@@ -71,7 +71,11 @@ class POSProvider extends ChangeNotifier {
     for (var map in invoiceMaps) {
       final itemMaps = await db.query('invoice_items', where: 'invoice_id = ?', whereArgs: [map['id']]);
       final items = itemMaps.map((im) => InvoiceItem.fromMap(im)).toList();
-      _invoices.add(Invoice.fromMap(map, items: items));
+      
+      final paymentMaps = await db.query('invoice_payments', where: 'invoice_id = ?', whereArgs: [map['id']]);
+      final payments = paymentMaps.map((pm) => InvoicePayment.fromMap(pm)).toList();
+      
+      _invoices.add(Invoice.fromMap(map, items: items, payments: payments));
     }
     // No notify here to avoid double notify during initial load, usually fine though
   }
@@ -114,7 +118,11 @@ class POSProvider extends ChangeNotifier {
     for (var map in results) {
       final itemMaps = await db.query('invoice_items', where: 'invoice_id = ?', whereArgs: [map['id']]);
       final items = itemMaps.map((im) => InvoiceItem.fromMap(im)).toList();
-      _invoices.add(Invoice.fromMap(map, items: items));
+      
+      final paymentMaps = await db.query('invoice_payments', where: 'invoice_id = ?', whereArgs: [map['id']]);
+      final payments = paymentMaps.map((pm) => InvoicePayment.fromMap(pm)).toList();
+      
+      _invoices.add(Invoice.fromMap(map, items: items, payments: payments));
     }
     notifyListeners();
     notifyListeners();
