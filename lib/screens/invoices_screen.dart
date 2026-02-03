@@ -29,6 +29,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   String _searchQuery = '';
   // Filters
   String _filterStatus = 'ALL';
+  String _filterBillType = 'ALL';
   DateTime? _filterDateFrom;
   DateTime? _filterDateTo;
   InvoiceType? _filterType;
@@ -104,6 +105,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     DateTime? tempTo = _filterDateTo;
     InvoiceType? tempType = _filterType;
     String tempStatus = _filterStatus;
+    String tempBillType = _filterBillType;
 
     showDialog(
       context: context,
@@ -181,12 +183,26 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                     decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12)),
                     items: [
                       const DropdownMenuItem(value: null, child: Text('All Types')),
-                      ...InvoiceType.values.map((t) => DropdownMenuItem(
-                        value: t, 
-                        child: Text(t.name.toUpperCase()),
-                      )),
+                      ...InvoiceType.values
+                        .where((t) => t != InvoiceType.advance) // Exclude Advance from Type
+                        .map((t) => DropdownMenuItem(
+                          value: t, 
+                          child: Text(t.name.toUpperCase()),
+                        )),
                     ],
                     onChanged: (val) => setState(() => tempType = val),
+                  ),
+                  const SizedBox(height: 16),
+
+                  const Text('Bill Type', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: tempBillType,
+                    decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12)),
+                    items: ['ALL', 'REGULAR', 'ADVANCE']
+                        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                        .toList(),
+                    onChanged: (val) => setState(() => tempBillType = val!),
                   ),
                   const SizedBox(height: 16),
 
@@ -195,7 +211,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                   DropdownButtonFormField<String>(
                     value: tempStatus,
                     decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12)),
-                    items: ['ALL', 'ACTIVE', 'CANCELLED']
+                    items: ['ALL', 'COMPLETED', 'PARTIAL', 'CANCELLED']
                         .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                         .toList(),
                     onChanged: (val) => setState(() => tempStatus = val!),
@@ -212,6 +228,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                   tempTo = null;
                   tempType = null;
                   tempStatus = 'ALL';
+                  tempBillType = 'ALL';
                 });
               },
               child: const Text('Reset'),
@@ -223,6 +240,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                   _filterDateTo = tempTo;
                   _filterType = tempType;
                   _filterStatus = tempStatus;
+                  _filterBillType = tempBillType;
                   _currentPage = 1;
                 });
                 Navigator.pop(context);
@@ -264,6 +282,13 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       ));
     }
 
+    if (_filterBillType != 'ALL') {
+      filters.add(_buildFilterChip(
+        label: 'Bill Type: $_filterBillType',
+        onDeleted: () => setState(() { _filterBillType = 'ALL'; _currentPage = 1; }),
+      ));
+    }
+
     if (_filterStatus != 'ALL') {
       filters.add(_buildFilterChip(
         label: 'Status: $_filterStatus',
@@ -301,6 +326,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                    _filterDateTo = null;
                    _filterType = null;
                    _filterStatus = 'ALL';
+                   _filterBillType = 'ALL';
                    _currentPage = 1;
                  });
                },
@@ -447,6 +473,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
           // final matchesSearch = i.invoiceNumber.toLowerCase().contains(_searchQuery.toLowerCase()); // Handled by DB
           final matchesStatus = _filterStatus == 'ALL' || i.status.name.toUpperCase() == _filterStatus;
           final matchesType = _filterType == null || i.type == _filterType;
+          final matchesBillType = _filterBillType == 'ALL' || i.billType == _filterBillType;
           
           bool matchesDate = true;
           if (_filterDateFrom != null) {
@@ -456,7 +483,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
             matchesDate = matchesDate && i.createdAt.isBefore(_filterDateTo!.add(const Duration(days: 1)));
           }
 
-          return matchesStatus && matchesType && matchesDate;
+          return matchesStatus && matchesType && matchesBillType && matchesDate;
         }).toList();
 
         if (filteredInvoices.isEmpty) {
@@ -716,7 +743,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                       },
                       itemBuilder: (context) => [
                         const PopupMenuItem(value: 'print', child: Text('Print')),
-                        if (invoice.status == InvoiceStatus.active)
+                        if (invoice.status == InvoiceStatus.completed || invoice.status == InvoiceStatus.active)
                           const PopupMenuItem(
                             value: 'cancel', 
                             child: Text('Cancel Invoice', style: TextStyle(color: Colors.red)),

@@ -40,7 +40,7 @@ void main() async {
     await windowManager.focus();
     await windowManager.setTitleBarStyle(TitleBarStyle.normal); // Explicitly ensure normal style
     await windowManager.setFullScreen(false); // Ensure not in fullscreen
-    await windowManager.maximize();
+    // await windowManager.maximize(); // Commented out to prevent fullscreen
   });
 }
 

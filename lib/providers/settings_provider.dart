@@ -19,14 +19,17 @@ class SettingsProvider with ChangeNotifier {
   static const String KEY_CURRENT_BRANCH_ID = 'current_branch_id';
   static const String KEY_PRODUCT_TAX_INCLUSIVE = 'product_tax_inclusive';
   static const String KEY_SERVICE_TAX_INCLUSIVE = 'service_tax_inclusive';
+  static const String KEY_SERVICE_PRICE_EDITABLE = 'service_price_editable';
 
   // Values
   bool _productTaxInclusive = false;
   bool _serviceTaxInclusive = false;
+  bool _servicePriceEditable = true;
 
   // Getters
   bool get productTaxInclusive => _productTaxInclusive;
   bool get serviceTaxInclusive => _serviceTaxInclusive;
+  bool get servicePriceEditable => _servicePriceEditable;
   static const String KEY_BUSINESS_NAME = 'business_name';
   static const String KEY_BUSINESS_ADDRESS = 'business_address';
   static const String KEY_BUSINESS_GSTIN = 'business_gstin';
@@ -75,6 +78,7 @@ class SettingsProvider with ChangeNotifier {
     _backupEmail = _prefs?.getString(KEY_BACKUP_EMAIL) ?? '';
     _productTaxInclusive = _prefs?.getBool(KEY_PRODUCT_TAX_INCLUSIVE) ?? false;
     _serviceTaxInclusive = _prefs?.getBool(KEY_SERVICE_TAX_INCLUSIVE) ?? false;
+    _servicePriceEditable = _prefs?.getBool(KEY_SERVICE_PRICE_EDITABLE) ?? true;
 
     _isLoading = false;
     notifyListeners();
@@ -88,6 +92,12 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     await _prefs?.setBool(KEY_PRODUCT_TAX_INCLUSIVE, productInclusive);
     await _prefs?.setBool(KEY_SERVICE_TAX_INCLUSIVE, serviceInclusive);
+  }
+
+  Future<void> updateServicePriceEditable(bool editable) async {
+    _servicePriceEditable = editable;
+    notifyListeners();
+    await _prefs?.setBool(KEY_SERVICE_PRICE_EDITABLE, editable);
   }
 
   Future<void> _loadBranches() async {

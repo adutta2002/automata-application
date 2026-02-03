@@ -563,6 +563,7 @@ class _ProductInvoiceScreenState extends State<ProductInvoiceScreen> {
     return InvoiceItemTile(
       item: item,
       showQtyControls: true,
+      showRateEditor: false,
       onRemove: () {
         setState(() => _items.removeAt(index));
         _calculateTotals();
@@ -697,7 +698,7 @@ class _ProductInvoiceScreenState extends State<ProductInvoiceScreen> {
       final branchId = context.read<SettingsProvider>().currentBranchId;
 
       // Determine Status
-      InvoiceStatus status = overrideStatus ?? InvoiceStatus.active;
+      InvoiceStatus status = overrideStatus ?? InvoiceStatus.completed;
       if (overrideStatus == null) { // If not HOLD/CANCELLED explicitly
         if (_billType == 'REGULAR') {
           status = InvoiceStatus.completed; // Regular is always Completed (Paid)

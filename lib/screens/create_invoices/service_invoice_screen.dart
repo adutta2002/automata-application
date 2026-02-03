@@ -32,6 +32,7 @@ class _ServiceInvoiceScreenState extends State<ServiceInvoiceScreen> {
   double _billDiscountInput = 0;
   bool _isBillDiscountPercentage = false;
   late bool _isTaxInclusive;
+  late bool _isPriceEditable;
   double _advanceAdjustedAmount = 0;
   String _paymentMode = 'CASH';
   List<InvoicePayment> _payments = [];
@@ -50,6 +51,7 @@ class _ServiceInvoiceScreenState extends State<ServiceInvoiceScreen> {
     super.initState();
     final settings = context.read<SettingsProvider>();
     _isTaxInclusive = settings.serviceTaxInclusive;
+    _isPriceEditable = settings.servicePriceEditable;
 
     if (widget.existingInvoice != null) {
       _loadExistingInvoice();
@@ -593,6 +595,17 @@ class _ServiceInvoiceScreenState extends State<ServiceInvoiceScreen> {
         });
         _calculateTotals();
       },
+      showRateEditor: true,
+      isRateEditable: _isPriceEditable,
+      onRateChanged: (val) {
+        final newRate = double.tryParse(val);
+        if (newRate != null && newRate >= 0) {
+           setState(() {
+            _items[index] = _items[index].copyWith(rate: newRate);
+          });
+          _calculateTotals();
+        }
+      },
     );
   }
 
@@ -711,7 +724,7 @@ class _ServiceInvoiceScreenState extends State<ServiceInvoiceScreen> {
     final branchId = context.read<SettingsProvider>().currentBranchId;
 
     // Determine Status
-    InvoiceStatus status = overrideStatus ?? InvoiceStatus.active;
+    InvoiceStatus status = overrideStatus ?? InvoiceStatus.completed;
     if (overrideStatus == null) { // If not HOLD/CANCELLED explicitly
         if (_billType == 'REGULAR') {
           status = InvoiceStatus.completed; // Regular is always Completed (Paid)

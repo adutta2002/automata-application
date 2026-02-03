@@ -14,48 +14,42 @@ class InvoiceItemTile extends StatefulWidget {
     required this.onChanged,
     required this.onRemove,
     this.showQtyControls = false,
+    this.isRateEditable = false,
+    this.showRateEditor = false,
+    this.onRateChanged,
   });
+
+  final bool isRateEditable;
+  final bool showRateEditor;
+  final ValueChanged<String>? onRateChanged;
 
   @override
   State<InvoiceItemTile> createState() => _InvoiceItemTileState();
 }
 
 class _InvoiceItemTileState extends State<InvoiceItemTile> {
-  late TextEditingController _discountCtrl;
-  final FocusNode _discountFocus = FocusNode();
+  late TextEditingController _rateCtrl;
+  final FocusNode _rateFocus = FocusNode();
 
   @override
   void initState() {
     super.initState();
-    _discountCtrl = TextEditingController(
-      text: widget.item.discount == 0 ? '' : widget.item.discount.toString(),
-    );
-    // Listen to focus changes if needed, but onChanged handles immediate updates.
+    _rateCtrl = TextEditingController(text: widget.item.rate.toString());
   }
 
   @override
   void didUpdateWidget(InvoiceItemTile oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // If the discount value changed externally and it's NOT what is currently in the text field, update it.
-    // This handles scenarios where logic might reset discount, but we guard against cursor jumps while typing.
-    final parsed = double.tryParse(_discountCtrl.text) ?? 0;
-    if (widget.item.discount != parsed && !_discountFocus.hasFocus) {
-       _discountCtrl.text = widget.item.discount == 0 ? '' : widget.item.discount.toString();
+    if (widget.item.rate != double.tryParse(_rateCtrl.text) && !_rateFocus.hasFocus) {
+      _rateCtrl.text = widget.item.rate.toString();
     }
   }
 
   @override
   void dispose() {
-    _discountCtrl.dispose();
-    _discountFocus.dispose();
+    _rateCtrl.dispose();
+    _rateFocus.dispose();
     super.dispose();
-  }
-
-  void _onDiscountChanged(String val) {
-    final d = double.tryParse(val) ?? 0;
-    // Notify parent immediately. Parent will rebuild tile.
-    // didUpdateWidget will see the new value matches parsed value -> No text update -> Cursor stable.
-    widget.onChanged(widget.item.copyWith(discount: d));
   }
 
   void _onQtyChanged(double newQty) {
@@ -81,10 +75,12 @@ class _InvoiceItemTileState extends State<InvoiceItemTile> {
                   Text(widget.item.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                   Row(
                     children: [
-                      Text(
-                        '₹${widget.item.rate.toStringAsFixed(2)}',
-                        style: TextStyle(color: AppTheme.mutedTextColor, fontSize: 12),
-                      ),
+                      // If Rate Editor is NOT shown in main row, show it here as text
+                      if (!widget.showRateEditor)
+                        Text(
+                          '₹${widget.item.rate.toStringAsFixed(2)}',
+                          style: TextStyle(color: AppTheme.mutedTextColor, fontSize: 12),
+                        ),
                       if (widget.item.gstRate > 0) ...[
                         const SizedBox(width: 8),
                         Container(
@@ -148,23 +144,25 @@ class _InvoiceItemTileState extends State<InvoiceItemTile> {
             ] else 
               const SizedBox.shrink(),
 
-            // Item Discount Input
-            SizedBox(
-              width: 80,
-              child: TextField(
-                controller: _discountCtrl,
-                focusNode: _discountFocus,
-                decoration: const InputDecoration(
-                  labelText: 'Disc.',
-                  isDense: true,
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            if (widget.showRateEditor) ...[
+               SizedBox(
+                width: 80,
+                child: TextField(
+                  enabled: widget.isRateEditable,
+                  controller: _rateCtrl,
+                  focusNode: _rateFocus,
+                  decoration: const InputDecoration(
+                    labelText: 'Rate',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  ),
+                  keyboardType: TextInputType.number,
+                  onChanged: widget.onRateChanged,
                 ),
-                keyboardType: TextInputType.number,
-                onChanged: _onDiscountChanged,
               ),
-            ),
-            const SizedBox(width: 16),
+              const SizedBox(width: 16),
+            ],
             
             // Amount (before tax)
             SizedBox(
@@ -176,11 +174,6 @@ class _InvoiceItemTileState extends State<InvoiceItemTile> {
                     '₹${baseAmount.toStringAsFixed(2)}',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
-                  if (widget.item.discount > 0)
-                    Text(
-                      '-₹${widget.item.discount.toStringAsFixed(0)} disc',
-                      style: const TextStyle(fontSize: 10, color: Colors.green),
-                    ),
                 ],
               ),
             ),

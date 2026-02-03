@@ -332,7 +332,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
       },
       payments: _payments,
       onPaymentsChanged: (val) => setState(() => _payments = val),
-      onSave: () => _submitMembership(InvoiceStatus.active),
+      onSave: () => _submitMembership(InvoiceStatus.completed),
 
       onDiscountChanged: (val, isPercentage) {
          setState(() {

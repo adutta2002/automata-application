@@ -64,6 +64,10 @@ class _ShellScreenState extends State<ShellScreen> {
       },
       child: Focus(
         autofocus: true,
+        onKey: (node, event) {
+             // Optional: Handle keys here if needed, or let CallbackShortcuts handle it
+             return KeyEventResult.ignored; 
+        },
         child: LayoutBuilder(
           builder: (context, constraints) {
             bool isDesktop = constraints.maxWidth >= 1000;
@@ -334,7 +338,7 @@ class _ShellScreenState extends State<ShellScreen> {
                             fontSize: 12,
                           ),
                         ),
-                        if (tab.type != TabType.dashboard) ...[
+                        if (tab.id != 'dashboard') ...[
                           const SizedBox(width: 8),
                           InkWell(
                             onTap: () => provider.removeTab(tab.id),

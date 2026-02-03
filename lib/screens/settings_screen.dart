@@ -167,6 +167,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
             );
           },
         ),
+        const Divider(),
+        SwitchListTile(
+          title: const Text('Service Invoice: Price Editable'),
+          subtitle: const Text('If enabled, you can edit service prices manually during invoice creation'),
+          value: settings.servicePriceEditable,
+          onChanged: (val) {
+            settings.updateServicePriceEditable(val);
+          },
+        ),
       ],
     );
   }
