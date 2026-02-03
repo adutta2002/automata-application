@@ -18,6 +18,14 @@ class DayEndReport extends StatelessWidget {
         elevation: 0,
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
+        automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: Consumer<POSProvider>(
         builder: (context, provider, child) {
