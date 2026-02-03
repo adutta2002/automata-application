@@ -7,6 +7,7 @@ import '../providers/auth_provider.dart';
 import '../providers/user_provider.dart';
 import '../models/user.dart';
 import '../models/pos_models.dart';
+import '../providers/pos_provider.dart';
 import 'dashboard_screen.dart';
 import 'invoices_screen.dart';
 import 'inventory_screen.dart';
@@ -45,6 +46,8 @@ class _ShellScreenState extends State<ShellScreen> {
           ),
         );
       }
+      // Load Data Once
+      context.read<POSProvider>().loadInitialData();
     });
   }
 

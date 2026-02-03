@@ -64,8 +64,7 @@ class AutomataApp extends StatelessWidget {
           }
           
           if (authProvider.isAuthenticated) {
-            // Load POS data after authentication
-            context.read<POSProvider>().loadInitialData();
+            // Load POS data moved to ShellScreen initState to prevent duplicates
             return const ShellScreen();
           }
           
