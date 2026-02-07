@@ -23,7 +23,7 @@ class _HsnFormDialogState extends State<HsnFormDialog> {
   late TextEditingController _cgstController;
   late TextEditingController _sgstController;
   late TextEditingController _igstController;
-  late TextEditingController _cessController;
+
   
   String _selectedType = 'GOODS';
   DateTime? _effectiveFrom;
@@ -42,7 +42,6 @@ class _HsnFormDialogState extends State<HsnFormDialog> {
     _cgstController = TextEditingController(text: widget.hsn?.cgstRate.toString() ?? '');
     _sgstController = TextEditingController(text: widget.hsn?.sgstRate.toString() ?? '');
     _igstController = TextEditingController(text: widget.hsn?.igstRate.toString() ?? '');
-    _cessController = TextEditingController(text: widget.hsn?.cessRate.toString() ?? '');
 
     _selectedType = widget.hsn?.type ?? 'GOODS';
     _effectiveFrom = widget.hsn?.effectiveFrom;
@@ -57,7 +56,7 @@ class _HsnFormDialogState extends State<HsnFormDialog> {
     _cgstController.dispose();
     _sgstController.dispose();
     _igstController.dispose();
-    _cessController.dispose();
+
     super.dispose();
   }
 
@@ -79,7 +78,7 @@ class _HsnFormDialogState extends State<HsnFormDialog> {
     final total = cgst + sgst;
     if (_rateController.text != total.toString()) {
        _rateController.text = total.toStringAsFixed(2);
-       _igstController.text = total.toStringAsFixed(2); // Usually IGST is sum of CGST+SGST
+       // IGST is NOT calculated from CGST+SGST as per user request
     }
   }
 
@@ -112,7 +111,7 @@ class _HsnFormDialogState extends State<HsnFormDialog> {
       cgstRate: double.tryParse(_cgstController.text) ?? 0,
       sgstRate: double.tryParse(_sgstController.text) ?? 0,
       igstRate: double.tryParse(_igstController.text) ?? 0,
-      cessRate: double.tryParse(_cessController.text) ?? 0,
+      cessRate: 0.0, // CESS Removed
       type: _selectedType,
       effectiveFrom: _effectiveFrom,
       effectiveTo: _effectiveTo,
@@ -130,263 +129,354 @@ class _HsnFormDialogState extends State<HsnFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        width: 600, // Slightly wider
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  _isEdit ? 'Edit HSN/SAC' : 'Add New HSN/SAC',
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const Divider(height: 32),
-            Flexible(
-              child: SingleChildScrollView(
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildField(
-                              label: 'HSN/SAC Code',
-                              child: TextFormField(
-                                controller: _codeController,
-                                decoration: const InputDecoration(
-                                  hintText: 'Enter code',
-                                  border: OutlineInputBorder(),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                ),
-                                validator: Validators.required,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildField(
-                              label: 'Total GST Rate (%)',
-                              child: TextFormField(
-                                controller: _rateController,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  hintText: 'e.g. 18.0',
-                                  border: OutlineInputBorder(),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                  suffixText: '%',
-                                ),
-                                onChanged: _onTotalRateChanged,
-                                validator: (val) => Validators.required(val) ?? Validators.nonNegativeNumber(val),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      
-                      // Configurable Split Section
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: Column(
-                           crossAxisAlignment: CrossAxisAlignment.start,
+       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+       backgroundColor: Colors.white,
+       elevation: 8,
+       insetPadding: const EdgeInsets.all(16),
+       child: Container(
+         width: screenSize.width > 900 ? 900 : screenSize.width * 0.95,
+         constraints: BoxConstraints(maxHeight: screenSize.height * 0.9),
+         child: Column(
+           children: [
+             // Header with Gradient
+             Container(
+               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+               decoration: BoxDecoration(
+                 gradient: LinearGradient(
+                   colors: [AppTheme.primaryColor.withAlpha(20), Colors.white],
+                   begin: Alignment.topCenter,
+                   end: Alignment.bottomCenter,
+                 ),
+                 borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                 border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+               ),
+               child: Row(
+                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                 children: [
+                   Column(
+                     crossAxisAlignment: CrossAxisAlignment.start,
+                     children: [
+                       Text(
+                         _isEdit ? 'Edit HSN/SAC Master' : 'New HSN/SAC Master',
+                         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.textColor),
+                       ),
+                       const SizedBox(height: 4),
+                       const Text(
+                         'Manage tax codes and GST rates',
+                         style: TextStyle(fontSize: 14, color: Colors.grey),
+                       ),
+                     ],
+                   ),
+                   IconButton(
+                     onPressed: () => Navigator.pop(context),
+                     icon: const Icon(Icons.close, color: Colors.grey),
+                     style: IconButton.styleFrom(
+                       backgroundColor: Colors.white,
+                       hoverColor: Colors.grey.shade100,
+                     ),
+                   ),
+                 ],
+               ),
+             ),
+
+             Expanded(
+               child: SingleChildScrollView(
+                 padding: const EdgeInsets.all(32),
+                 child: Form(
+                   key: _formKey,
+                   child: Column(
+                     crossAxisAlignment: CrossAxisAlignment.start,
+                     children: [
+                       // Section 1: Basic Info
+                       _buildSectionHeader('HSN/SAC Details', Icons.description_outlined),
+                       const SizedBox(height: 24),
+
+                       Row(
+                         crossAxisAlignment: CrossAxisAlignment.start,
+                         children: [
+                           Expanded(
+                             flex: 2,
+                             child: _buildField(
+                               label: 'HSN/SAC Code',
+                               isRequired: true,
+                               child: TextFormField(
+                                 controller: _codeController,
+                                 decoration: _inputDecoration('Enter code', Icons.tag),
+                                 validator: Validators.required,
+                               ),
+                             ),
+                           ),
+                           const SizedBox(width: 24),
+                           Expanded(
+                             flex: 1,
+                             child: _buildField(
+                               label: 'Type',
+                               child: DropdownButtonFormField<String>(
+                                 isExpanded: true,
+                                 value: _selectedType,
+                                 decoration: _inputDecoration('', Icons.category),
+                                 items: const [
+                                   DropdownMenuItem(value: 'GOODS', child: Text('Product (Goods)')),
+                                   DropdownMenuItem(value: 'SERVICES', child: Text('Service')),
+                                 ],
+                                 onChanged: (val) => setState(() => _selectedType = val!),
+                               ),
+                             ),
+                           ),
+                           const SizedBox(width: 24),
+                           Expanded(
+                             flex: 1,
+                             child: _buildField(
+                               label: 'Total GST (%)',
+                               isRequired: true,
+                               child: TextFormField(
+                                 controller: _rateController,
+                                 keyboardType: TextInputType.number,
+                                 decoration: _inputDecoration('18.0', Icons.percent),
+                                 onChanged: _onTotalRateChanged,
+                                 validator: (val) => Validators.required(val) ?? Validators.nonNegativeNumber(val),
+                               ),
+                             ),
+                           ),
+                         ],
+                       ),
+                       
+                       const SizedBox(height: 24),
+                       
+                       // Section 2: Tax Breakdown
+                       _buildSectionHeader('Tax Breakdown (Configurable)', Icons.pie_chart_outline),
+                       const SizedBox(height: 24),
+
+                       Container(
+                         padding: const EdgeInsets.all(20),
+                         decoration: BoxDecoration(
+                           color: Colors.grey.shade50,
+                           borderRadius: BorderRadius.circular(12),
+                           border: Border.all(color: Colors.grey.shade200),
+                         ),
+                         child: Row(
                            children: [
-                             const Text('Tax Breakdown (Configurable)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.indigo)),
-                             const SizedBox(height: 12),
-                             Row(
-                               children: [
-                                 Expanded(
-                                   child: _buildField(
-                                     label: 'CGST %',
-                                     child: TextFormField(
-                                       controller: _cgstController,
-                                       keyboardType: TextInputType.number,
-                                       onChanged: (_) => _onComponentRateChanged(),
-                                       decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8), isDense: true),
-                                     ),
-                                   ),
+                             Expanded(
+                               child: _buildField(
+                                 label: 'CGST %',
+                                 child: TextFormField(
+                                   controller: _cgstController,
+                                   keyboardType: TextInputType.number,
+                                   onChanged: (_) => _onComponentRateChanged(),
+                                   decoration: _inputDecoration('0', Icons.percent).copyWith(fillColor: Colors.white),
                                  ),
-                                 const SizedBox(width: 8),
-                                 Expanded(
-                                   child: _buildField(
-                                     label: 'SGST %',
-                                     child: TextFormField(
-                                       controller: _sgstController,
-                                       keyboardType: TextInputType.number,
-                                       onChanged: (_) => _onComponentRateChanged(),
-                                       decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8), isDense: true),
-                                     ),
-                                   ),
+                               ),
+                             ),
+                             const SizedBox(width: 16),
+                             Expanded(
+                               child: _buildField(
+                                 label: 'SGST %',
+                                 child: TextFormField(
+                                   controller: _sgstController,
+                                   keyboardType: TextInputType.number,
+                                   onChanged: (_) => _onComponentRateChanged(),
+                                   decoration: _inputDecoration('0', Icons.percent).copyWith(fillColor: Colors.white),
                                  ),
-                                 const SizedBox(width: 8),
-                                 Expanded(
-                                   child: _buildField(
-                                     label: 'IGST %',
-                                     child: TextFormField(
-                                       controller: _igstController,
-                                       keyboardType: TextInputType.number,
-                                       decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8), isDense: true),
-                                     ),
-                                   ),
+                               ),
+                             ),
+                             const SizedBox(width: 16),
+                             Expanded(
+                               child: _buildField(
+                                 label: 'IGST %',
+                                 child: TextFormField(
+                                   controller: _igstController,
+                                   keyboardType: TextInputType.number,
+                                   decoration: _inputDecoration('0', Icons.percent).copyWith(fillColor: Colors.white),
                                  ),
-                                 const SizedBox(width: 8),
-                                 Expanded(
-                                   child: _buildField(
-                                     label: 'CESS %',
-                                     child: TextFormField(
-                                       controller: _cessController,
-                                       keyboardType: TextInputType.number,
-                                       decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8), isDense: true),
-                                     ),
-                                   ),
-                                 ),
-                               ],
+                               ),
                              ),
                            ],
-                        ),
-                      ),
+                         ),
+                       ),
 
-                      const SizedBox(height: 16),
-                      _buildField(
-                        label: 'Type',
-                        child: DropdownButtonFormField<String>(
-                          value: _selectedType,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          ),
-                          items: const [
-                            DropdownMenuItem(value: 'GOODS', child: Text('Product (Goods)')),
-                            DropdownMenuItem(value: 'SERVICES', child: Text('Service')),
-                          ],
-                          onChanged: (val) => setState(() => _selectedType = val!),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildField(
-                        label: 'Description',
-                        child: TextFormField(
-                          controller: _descriptionController,
-                          maxLines: 2,
-                          decoration: const InputDecoration(
-                            hintText: 'Enter short description',
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildField(
-                              label: 'Effective From',
-                              child: InkWell(
-                                onTap: () => _selectDate(context, true),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(color: Colors.grey.shade400),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(_effectiveFrom != null ? _dateFormatter.format(_effectiveFrom!) : 'Select Date'),
-                                      const Icon(Icons.calendar_today, size: 16),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildField(
-                              label: 'Effective To',
-                              child: InkWell(
-                                onTap: () => _selectDate(context, false),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(color: Colors.grey.shade400),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(_effectiveTo != null ? _dateFormatter.format(_effectiveTo!) : 'Select Date'),
-                                      const Icon(Icons.calendar_today, size: 16),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                const SizedBox(width: 16),
-                ElevatedButton(
-                  onPressed: _saveHsn,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                  child: Text(_isEdit ? 'Update' : 'Save'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+                       const SizedBox(height: 32),
+                       
+                       // Section 3: Additional Info
+                       _buildSectionHeader('Additional Information', Icons.info_outline),
+                       const SizedBox(height: 24),
+
+                       _buildField(
+                         label: 'Description',
+                         child: TextFormField(
+                           controller: _descriptionController,
+                           maxLines: 2,
+                           decoration: _inputDecoration('Enter short description', Icons.description),
+                         ),
+                       ),
+                       const SizedBox(height: 24),
+                       
+                       Row(
+                         children: [
+                           Expanded(
+                             child: _buildField(
+                               label: 'Effective From',
+                               child: InkWell(
+                                 onTap: () => _selectDate(context, true),
+                                 child: Container(
+                                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                   decoration: BoxDecoration(
+                                     border: Border.all(color: Colors.grey.shade300),
+                                     borderRadius: BorderRadius.circular(8),
+                                     color: Colors.white,
+                                   ),
+                                   child: Row(
+                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                     children: [
+                                       Text(
+                                         _effectiveFrom != null ? _dateFormatter.format(_effectiveFrom!) : 'Select Date',
+                                         style: TextStyle(color: _effectiveFrom != null ? AppTheme.textColor : Colors.grey.shade400, fontSize: 14),
+                                       ),
+                                       Icon(Icons.calendar_today, color: Colors.grey.shade400, size: 20),
+                                     ],
+                                   ),
+                                 ),
+                               ),
+                             ),
+                           ),
+                           const SizedBox(width: 24),
+                           Expanded(
+                             child: _buildField(
+                               label: 'Effective To',
+                               child: InkWell(
+                                 onTap: () => _selectDate(context, false),
+                                 child: Container(
+                                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                   decoration: BoxDecoration(
+                                     border: Border.all(color: Colors.grey.shade300),
+                                     borderRadius: BorderRadius.circular(8),
+                                     color: Colors.white,
+                                   ),
+                                   child: Row(
+                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                     children: [
+                                       Text(
+                                         _effectiveTo != null ? _dateFormatter.format(_effectiveTo!) : 'Select Date',
+                                         style: TextStyle(color: _effectiveTo != null ? AppTheme.textColor : Colors.grey.shade400, fontSize: 14),
+                                       ),
+                                       Icon(Icons.calendar_today, color: Colors.grey.shade400, size: 20),
+                                     ],
+                                   ),
+                                 ),
+                               ),
+                             ),
+                           ),
+                         ],
+                       ),
+                     ],
+                   ),
+                 ),
+               ),
+             ),
+
+             // Footer
+             Container(
+               padding: const EdgeInsets.all(24),
+               decoration: BoxDecoration(
+                 color: Colors.grey.shade50,
+                 borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+                 border: Border(top: BorderSide(color: Colors.grey.shade200)),
+               ),
+               child: Row(
+                 mainAxisAlignment: MainAxisAlignment.end,
+                 children: [
+                   OutlinedButton(
+                     onPressed: () => Navigator.pop(context),
+                     style: OutlinedButton.styleFrom(
+                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                       side: BorderSide(color: Colors.grey.shade300),
+                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                     ),
+                     child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                   ),
+                   const SizedBox(width: 16),
+                   ElevatedButton.icon(
+                     onPressed: _saveHsn,
+                     icon: const Icon(Icons.check, size: 18),
+                     label: Text(_isEdit ? 'Update Details' : 'Save Details'),
+                     style: ElevatedButton.styleFrom(
+                       backgroundColor: AppTheme.primaryColor,
+                       foregroundColor: Colors.white,
+                       elevation: 2,
+                       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                       textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                     ),
+                   ),
+                 ],
+               ),
+             ),
+           ],
+         ),
+       ),
     );
   }
 
-  Widget _buildField({required String label, required Widget child}) {
+  Widget _buildSectionHeader(String title, IconData icon) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppTheme.primaryColor.withAlpha(26), // Approx 0.1 opacity
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: AppTheme.primaryColor, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          title, 
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textColor)
+        ),
+      ],
+    );
+  }
+
+  Widget _buildField({required String label, required Widget child, bool isRequired = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13, color: Colors.grey)),
-        const SizedBox(height: 6),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppTheme.textColor)),
+            if (isRequired)
+              Text(' *', style: TextStyle(color: Colors.red.shade400, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 8),
         child,
       ],
+    );
+  }
+
+  InputDecoration _inputDecoration(String hint, IconData icon) {
+    return InputDecoration(
+      hintText: hint,
+      prefixIcon: Icon(icon, color: Colors.grey.shade400, size: 20),
+      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+      ),
     );
   }
 }

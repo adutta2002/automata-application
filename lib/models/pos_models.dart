@@ -81,6 +81,10 @@ class Product {
   final String category;
   final String? hsnCode;
   final double gstRate;
+  
+  // New Fields
+  final double mrp;
+  final bool isStockTracking;
 
   Product({
     this.id,
@@ -93,6 +97,8 @@ class Product {
     this.category = 'General',
     this.hsnCode,
     this.gstRate = 0,
+    this.mrp = 0, // Default to 0 if not provided
+    this.isStockTracking = true, // Default to true
   });
 
   Map<String, dynamic> toMap() {
@@ -107,6 +113,8 @@ class Product {
       'category': category,
       'hsn_code': hsnCode,
       'gst_rate': gstRate,
+      'mrp': mrp,
+      'is_stock_tracking': isStockTracking ? 1 : 0,
     };
   }
 
@@ -122,6 +130,8 @@ class Product {
       category: map['category'] ?? 'General',
       hsnCode: map['hsn_code'],
       gstRate: (map['gst_rate'] ?? 0.0).toDouble(),
+      mrp: (map['mrp'] ?? 0.0).toDouble(),
+      isStockTracking: (map['is_stock_tracking'] ?? 1) == 1,
     );
   }
 }

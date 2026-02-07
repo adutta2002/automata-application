@@ -36,7 +36,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 20,
+      version: 21,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -390,6 +390,12 @@ class DatabaseHelper {
       try { await db.execute("ALTER TABLE hsn_master ADD COLUMN sgst_rate REAL DEFAULT 0"); } catch (_) {}
       try { await db.execute("ALTER TABLE hsn_master ADD COLUMN igst_rate REAL DEFAULT 0"); } catch (_) {}
       try { await db.execute("ALTER TABLE hsn_master ADD COLUMN cess_rate REAL DEFAULT 0"); } catch (_) {}
+    }
+
+    if (oldVersion < 21) {
+      // Version 21: Product MRP and Stock Tracking
+      try { await db.execute("ALTER TABLE products ADD COLUMN mrp REAL DEFAULT 0"); } catch (_) {}
+      try { await db.execute("ALTER TABLE products ADD COLUMN is_stock_tracking INTEGER DEFAULT 1"); } catch (_) {}
     }
   }
 

@@ -45,7 +45,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
     super.dispose();
   }
 
-  void _saveService() {
+  void _saveService() async {
     if (!_formKey.currentState!.validate()) return;
 
     final service = Service(
@@ -57,118 +57,146 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
       gstRate: _selectedGst,
     );
 
-    if (_isEdit) {
-      context.read<POSProvider>().updateService(service);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Service updated')));
-    } else {
-      context.read<POSProvider>().addService(service);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Service added')));
+    try {
+      if (_isEdit) {
+        await context.read<POSProvider>().updateService(service);
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Service updated')));
+      } else {
+        await context.read<POSProvider>().addService(service);
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Service added')));
+      }
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     }
-    Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
     final hsnCodes = context.read<POSProvider>().hsnCodes;
-
-    // Check if current HSN text matches a valid HSN code
-    bool isRateLocked = false;
+    
+    // Auto-set GST based on SAC logic
     try {
       final matchingHsn = hsnCodes.firstWhere(
         (h) => h.code.trim().toLowerCase() == _hsnController.text.trim().toLowerCase(),
       );
-      
-      // If found, enforce the rate
       if (_gstRates.contains(matchingHsn.gstRate)) {
         if (_selectedGst != matchingHsn.gstRate) {
            WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) setState(() => _selectedGst = matchingHsn.gstRate);
            });
         }
-        isRateLocked = true;
       }
     } catch (_) {}
 
+    final screenSize = MediaQuery.of(context).size;
+
     return Dialog(
-       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+       backgroundColor: Colors.white,
+       elevation: 8,
+       insetPadding: const EdgeInsets.all(16),
        child: Container(
-         width: 600,
-         padding: const EdgeInsets.all(24),
-         decoration: BoxDecoration(
-           color: Colors.white,
-           borderRadius: BorderRadius.circular(16),
-         ),
+         width: screenSize.width > 900 ? 900 : screenSize.width * 0.95,
+         constraints: BoxConstraints(maxHeight: screenSize.height * 0.9),
          child: Column(
-           mainAxisSize: MainAxisSize.min,
            children: [
-             Row(
-               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-               children: [
-                 Text(
-                   _isEdit ? 'Edit Service' : 'Add New Service',
-                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+             // Header with Gradient
+             Container(
+               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+               decoration: BoxDecoration(
+                 gradient: LinearGradient(
+                   colors: [AppTheme.primaryColor.withAlpha(20), Colors.white],
+                   begin: Alignment.topCenter,
+                   end: Alignment.bottomCenter,
                  ),
-                 IconButton(
-                   onPressed: () => Navigator.pop(context),
-                   icon: const Icon(Icons.close),
-                 ),
-               ],
+                 borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                 border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+               ),
+               child: Row(
+                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                 children: [
+                   Column(
+                     crossAxisAlignment: CrossAxisAlignment.start,
+                     children: [
+                       Text(
+                         _isEdit ? 'Edit Service Master' : 'New Service Master',
+                         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.textColor),
+                       ),
+                       const SizedBox(height: 4),
+                       const Text(
+                         'Manage service details and pricing',
+                         style: TextStyle(fontSize: 14, color: Colors.grey),
+                       ),
+                     ],
+                   ),
+                   IconButton(
+                     onPressed: () => Navigator.pop(context),
+                     icon: const Icon(Icons.close, color: Colors.grey),
+                     style: IconButton.styleFrom(
+                       backgroundColor: Colors.white,
+                       hoverColor: Colors.grey.shade100,
+                     ),
+                   ),
+                 ],
+               ),
              ),
-             const Divider(height: 32),
-             Flexible(
+
+             Expanded(
                child: SingleChildScrollView(
+                 padding: const EdgeInsets.all(32),
                  child: Form(
                    key: _formKey,
                    child: Column(
                      crossAxisAlignment: CrossAxisAlignment.start,
                      children: [
-                       _buildField(
-                         label: 'Service Name',
-                         child: TextFormField(
-                           controller: _nameController,
-                           decoration: const InputDecoration(
-                             hintText: 'Enter service name', 
-                             border: OutlineInputBorder(),
-                             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                           ),
-                           validator: Validators.required,
-                         ),
-                       ),
-                       const SizedBox(height: 16),
-                       _buildField(
-                         label: 'Description',
-                         child: TextFormField(
-                           controller: _descriptionController,
-                           maxLines: 2,
-                           decoration: const InputDecoration(
-                             hintText: 'Enter description', 
-                             border: OutlineInputBorder(),
-                             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                           ),
-                         ),
-                       ),
-                       const SizedBox(height: 16),
+                       // Section 1: Basic Information
+                       _buildSectionHeader('Service Details', Icons.miscellaneous_services_outlined),
+                       const SizedBox(height: 24),
+                       
                        Row(
                          children: [
                            Expanded(
                              child: _buildField(
+                               label: 'Service Name',
+                               isRequired: true,
+                               child: TextFormField(
+                                 controller: _nameController,
+                                 decoration: _inputDecoration('Enter service name', Icons.cleaning_services),
+                                 validator: Validators.required,
+                               ),
+                             ),
+                           ),
+                         ],
+                       ),
+                       const SizedBox(height: 24),
+                       
+                       // Section 2: Pricing & Tax
+                       _buildSectionHeader('Pricing & Tax', Icons.monetization_on_outlined),
+                       const SizedBox(height: 24),
+
+                       Row(
+                         crossAxisAlignment: CrossAxisAlignment.start,
+                         children: [
+                           Expanded(
+                             flex: 2,
+                             child: _buildField(
                                label: 'Rate (₹)',
+                               isRequired: true,
                                child: TextFormField(
                                  controller: _rateController,
                                  keyboardType: TextInputType.number,
-                                 decoration: const InputDecoration(
-                                   hintText: '0.00', 
-                                   border: OutlineInputBorder(),
-                                   contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                 ),
+                                 decoration: _inputDecoration('0.00', Icons.currency_rupee),
                                  validator: Validators.positiveNumber,
                                ),
                              ),
                            ),
-                           const SizedBox(width: 16),
+                           const SizedBox(width: 24),
                            Expanded(
+                             flex: 2,
                              child: _buildField(
-                               label: 'SAC Code (HSN)',
+                               label: 'SAC / HSN Code',
+                               isRequired: true,
                                child: Autocomplete<HsnCode>(
                                  initialValue: TextEditingValue(text: _hsnController.text),
                                  displayStringForOption: (HsnCode option) => option.code,
@@ -191,35 +219,48 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                                    return TextFormField(
                                      controller: textEditingController,
                                      focusNode: focusNode,
-                                     decoration: const InputDecoration(
-                                        hintText: 'Search SAC', 
-                                        border: OutlineInputBorder(),
-                                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                     ),
+                                     decoration: _inputDecoration('Search SAC', Icons.search),
                                      onChanged: (val) {
                                        _hsnController.text = val;
-                                       setState(() {}); // Trigger matching check
+                                       setState(() {}); 
                                      },
                                    );
                                  },
                                ),
                              ),
                            ),
+                           const SizedBox(width: 24),
+                           Expanded(
+                             flex: 1,
+                             child: _buildField(
+                               label: 'GST Rate',
+                               child: DropdownButtonFormField<double>(
+                                 isExpanded: true,
+                                 value: _gstRates.contains(_selectedGst) ? _selectedGst : 0.0,
+                                 decoration: _inputDecoration('', Icons.percent).copyWith(
+                                    filled: true,
+                                    fillColor: Colors.grey.shade100, // Explicitly disabled look
+                                    helperText: 'Auto-set',
+                                 ),
+                                 items: _gstRates.map((r) => DropdownMenuItem(
+                                   value: r, 
+                                   child: Text('${r.toInt()}%', style: const TextStyle(fontWeight: FontWeight.w500)),
+                                 )).toList(),
+                                 onChanged: null, // Read-only
+                               ),
+                             ),
+                           ),
                          ],
                        ),
-                       const SizedBox(height: 16),
+
+                       const SizedBox(height: 24),
+
                        _buildField(
-                         label: 'GST Rate',
-                         child: DropdownButtonFormField<double>(
-                           value: _gstRates.contains(_selectedGst) ? _selectedGst : 0.0,
-                           decoration: InputDecoration(
-                             border: const OutlineInputBorder(),
-                             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                             filled: isRateLocked,
-                             fillColor: isRateLocked ? Colors.grey.shade200 : null,
-                           ),
-                           items: _gstRates.map((r) => DropdownMenuItem(value: r, child: Text('${r.toInt()}%'))).toList(),
-                           onChanged: isRateLocked ? null : (val) => setState(() => _selectedGst = val!),
+                         label: 'Description',
+                         child: TextFormField(
+                           controller: _descriptionController,
+                           maxLines: 3,
+                           decoration: _inputDecoration('Enter service description (optional)', Icons.description_outlined),
                          ),
                        ),
                      ],
@@ -227,26 +268,43 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                  ),
                ),
              ),
-             const SizedBox(height: 24),
-             Row(
-               mainAxisAlignment: MainAxisAlignment.end,
-               children: [
-                 TextButton(
-                   onPressed: () => Navigator.pop(context),
-                   child: const Text('Cancel'),
-                 ),
-                 const SizedBox(width: 16),
-                 ElevatedButton(
-                   onPressed: _saveService,
-                   style: ElevatedButton.styleFrom(
-                     backgroundColor: AppTheme.primaryColor,
-                     foregroundColor: Colors.white,
-                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+
+             // Footer
+             Container(
+               padding: const EdgeInsets.all(24),
+               decoration: BoxDecoration(
+                 color: Colors.grey.shade50,
+                 borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+                 border: Border(top: BorderSide(color: Colors.grey.shade200)),
+               ),
+               child: Row(
+                 mainAxisAlignment: MainAxisAlignment.end,
+                 children: [
+                   OutlinedButton(
+                     onPressed: () => Navigator.pop(context),
+                     style: OutlinedButton.styleFrom(
+                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                       side: BorderSide(color: Colors.grey.shade300),
+                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                     ),
+                     child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
                    ),
-                   child: Text(_isEdit ? 'Update' : 'Save'),
-                 ),
-               ],
+                   const SizedBox(width: 16),
+                   ElevatedButton.icon(
+                     onPressed: _saveService,
+                     icon: const Icon(Icons.check, size: 18),
+                     label: Text(_isEdit ? 'Update Service' : 'Save Service'),
+                     style: ElevatedButton.styleFrom(
+                       backgroundColor: AppTheme.primaryColor,
+                       foregroundColor: Colors.white,
+                       elevation: 2,
+                       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                       textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                     ),
+                   ),
+                 ],
+               ),
              ),
            ],
          ),
@@ -254,14 +312,64 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
     );
   }
 
-  Widget _buildField({required String label, required Widget child}) {
+  Widget _buildSectionHeader(String title, IconData icon) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppTheme.primaryColor.withAlpha(26), // Approx 0.1 opacity
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: AppTheme.primaryColor, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          title, 
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textColor)
+        ),
+      ],
+    );
+  }
+
+  Widget _buildField({required String label, required Widget child, bool isRequired = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13, color: Colors.grey)),
-        const SizedBox(height: 6),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppTheme.textColor)),
+            if (isRequired)
+              Text(' *', style: TextStyle(color: Colors.red.shade400, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 8),
         child,
       ],
+    );
+  }
+
+  InputDecoration _inputDecoration(String hint, IconData icon) {
+    return InputDecoration(
+      hintText: hint,
+      prefixIcon: Icon(icon, color: Colors.grey.shade400, size: 20),
+      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+      ),
     );
   }
 }
