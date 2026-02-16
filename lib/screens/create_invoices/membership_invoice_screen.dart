@@ -8,7 +8,6 @@ import '../../providers/settings_provider.dart';
 import '../../core/app_theme.dart';
 import '../../widgets/invoice/customer_selector.dart';
 import '../../widgets/invoice/invoice_summary_pane.dart';
-import '../invoices_screen.dart';
 import '../invoice_details_screen.dart';
 
 class MembershipInvoiceScreen extends StatefulWidget {
@@ -77,8 +76,8 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
           if (widget.tabId != null)
              TextButton.icon(
               onPressed: () => context.read<TabProvider>().removeTab(widget.tabId!),
-              icon: const Icon(Icons.close, color: Colors.black87),
-              label: const Text('Close Tab', style: TextStyle(color: Colors.black87)),
+              icon: const Icon(Icons.close, color: AppTheme.textColor),
+              label: const Text('Close Tab', style: TextStyle(color: AppTheme.textColor)),
             ),
           if (_selectedCustomer != null || _selectedPlan != null)
             TextButton.icon(
@@ -102,18 +101,39 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: _buildDateSelector(),
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.tableBorderColor),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: _buildDateSelector(),
+                              ),
+                              const SizedBox(height: 16),
+                              CustomerSelector(
+                                selectedCustomer: _selectedCustomer,
+                                customers: context.watch<POSProvider>().customers,
+                                onSelected: (c) => setState(() => _selectedCustomer = c),
+                              ),
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: 16),
-                        CustomerSelector(
-                          selectedCustomer: _selectedCustomer,
-                          customers: context.watch<POSProvider>().customers,
-                          onSelected: (c) => setState(() => _selectedCustomer = c),
+                        const SizedBox(height: 24),
+                        Container(
+                           padding: const EdgeInsets.all(24),
+                           decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.tableBorderColor),
+                          ),
+                          child: _buildPlanSelection(),
                         ),
-                        const SizedBox(height: 32),
-                        _buildPlanSelection(),
                       ],
                     ),
                   ),
@@ -180,15 +200,15 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300),
+          border: Border.all(color: AppTheme.tableBorderColor),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
+            const Icon(Icons.calendar_today, size: 16, color: AppTheme.mutedTextColor),
             const SizedBox(width: 8),
-            Text(DateFormat('dd MMM yyyy, hh:mm a').format(_selectedDate)),
+            Text(DateFormat('dd MMM yyyy, hh:mm a').format(_selectedDate), style: const TextStyle(color: AppTheme.textColor)),
           ],
         ),
       ),
@@ -244,54 +264,58 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
                   _calculateTotal();
                 });
               },
-              child: Container(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
                 decoration: BoxDecoration(
-                  color: isSelected ? AppTheme.primaryColor.withOpacity(0.1) : Colors.white,
+                  color: isSelected ? AppTheme.primaryColor.withOpacity(0.05) : Colors.white,
                   border: Border.all(
-                    color: isSelected ? AppTheme.primaryColor : Colors.grey.shade300,
+                    color: isSelected ? AppTheme.primaryColor : AppTheme.tableBorderColor,
                     width: isSelected ? 2 : 1,
                   ),
                   borderRadius: BorderRadius.circular(12),
+                  boxShadow: isSelected ? [
+                    BoxShadow(color: AppTheme.primaryColor.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 4))
+                  ] : [],
                 ),
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Expanded(child: Text(plan.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isSelected ? AppTheme.primaryColor : Colors.black87), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                        Expanded(child: Text(plan.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isSelected ? AppTheme.primaryColor : AppTheme.textColor), maxLines: 1, overflow: TextOverflow.ellipsis)),
                         if (plan.discountValue > 0)
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(4)),
-                            child: Text('${plan.discountType == 'FLAT' ? '₹' : ''}${plan.discountValue}${plan.discountType == 'PERCENTAGE' ? '%' : ''} OFF', style: TextStyle(fontSize: 10, color: Colors.green.shade800, fontWeight: FontWeight.bold)),
+                            decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(4)),
+                            child: Text('${plan.discountType == 'FLAT' ? '₹' : ''}${plan.discountValue}${plan.discountType == 'PERCENTAGE' ? '%' : ''} OFF', style: TextStyle(fontSize: 10, color: Colors.green.shade700, fontWeight: FontWeight.bold)),
                           ),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Text('${plan.durationMonths} Months', style: const TextStyle(color: Colors.grey, fontSize: 12)),
                     const SizedBox(height: 8),
+                    Text('${plan.durationMonths} Months', style: const TextStyle(color: AppTheme.mutedTextColor, fontSize: 12, fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 12),
                     Expanded(
                       child: Text(
                         plan.benefits.isNotEmpty ? plan.benefits : 'No specific benefits listed.',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                        style: const TextStyle(fontSize: 12, color: AppTheme.textColor, height: 1.4),
                         maxLines: 4,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const Divider(),
+                    const Divider(height: 24),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Tax: ${plan.gstRate}%', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                            const Text('Price', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                            Text('Tax: ${plan.gstRate}%', style: const TextStyle(fontSize: 10, color: AppTheme.mutedTextColor)),
+                            const Text('Price', style: TextStyle(fontSize: 10, color: AppTheme.mutedTextColor)),
                           ],
                         ),
-                        Text('₹${plan.price.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                        Text('₹${plan.price.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: AppTheme.primaryColor)),
                       ],
                     ),
                   ],

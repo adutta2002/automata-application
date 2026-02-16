@@ -20,7 +20,7 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
   RangeValues? _rateRange;
   
   int _currentPage = 1;
-  static const int _itemsPerPage = 4;
+  static const int _itemsPerPage = 10;
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +31,7 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
         children: [
           _buildHeader(),
           _buildActiveFilters(),
-          _buildSearchBar(),
+          _buildSearchAndFilter(),
           Expanded(child: _buildServiceTable()),
         ],
       ),
@@ -56,25 +56,19 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
               color: AppTheme.textColor,
             ),
           ),
-          Row(
-            children: [
-              _buildFilterButton(),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: () => showDialog(
-                  context: context,
-                  builder: (context) => const ServiceFormDialog(),
-                ),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add Service'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  elevation: 0,
-                ),
-              ),
-            ],
+          ElevatedButton.icon(
+            onPressed: () => showDialog(
+              context: context,
+              builder: (context) => const ServiceFormDialog(),
+            ),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Add Service'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              elevation: 0,
+            ),
           ),
         ],
       ),
@@ -101,7 +95,7 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
     // Calculate max rate
     double maxRate = 0;
     if (services.isNotEmpty) {
-      maxRate = services.map((s) => s.rate).reduce((a, b) => a > b ? a : b);
+      maxRate = services.map((s) => s.rate).fold(0, (previousValue, element) => previousValue > element ? previousValue : element);
     }
     if (maxRate == 0) maxRate = 5000;
 
@@ -113,7 +107,8 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: const Text('Filter Services'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Filter Services'),
           content: SizedBox(
              width: 400,
              child: Column(
@@ -252,7 +247,7 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
       label: Text(label, style: const TextStyle(fontSize: 12)),
       deleteIcon: const Icon(Icons.close, size: 16),
       onDeleted: onDeleted,
-      backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+      backgroundColor: AppTheme.primaryColor.withAlpha(26),
       labelStyle: TextStyle(color: AppTheme.primaryColor),
       side: BorderSide.none,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
@@ -261,11 +256,14 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
     );
   }
 
-  Widget _buildSearchBar() {
+  Widget _buildSearchAndFilter() {
     return Container(
       padding: const EdgeInsets.all(24),
       color: Colors.white,
-      child: TextField(
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
         onChanged: (val) => setState(() {
           _searchQuery = val;
           _currentPage = 1; // Reset to page 1 on search
@@ -299,8 +297,14 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
           ),
         ),
       ),
+          ),
+          const SizedBox(width: 16),
+          _buildFilterButton(),
+        ],
+      ),
     );
   }
+
 
   Widget _buildServiceTable() {
     return Consumer<POSProvider>(
@@ -352,7 +356,7 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
             border: Border.all(color: AppTheme.tableBorderColor),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withAlpha(13),
                 blurRadius: 10,
                 offset: const Offset(0, 2),
               ),

@@ -20,7 +20,7 @@ class _MembershipPlansScreenState extends State<MembershipPlansScreen> {
   int? _filterDuration;
 
   int _currentPage = 1;
-  static const int _itemsPerPage = 4;
+  static const int _itemsPerPage = 10;
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +31,7 @@ class _MembershipPlansScreenState extends State<MembershipPlansScreen> {
         children: [
           _buildHeader(),
           _buildActiveFilters(),
-          _buildSearchBar(),
+          _buildSearchAndFilter(),
           Expanded(child: _buildMembershipTable()),
         ],
       ),
@@ -58,8 +58,6 @@ class _MembershipPlansScreenState extends State<MembershipPlansScreen> {
           ),
           Row(
             children: [
-              _buildFilterButton(),
-              const SizedBox(width: 12),
               ElevatedButton.icon(
                 onPressed: () => showDialog(
                   context: context,
@@ -243,43 +241,51 @@ class _MembershipPlansScreenState extends State<MembershipPlansScreen> {
     );
   }
 
-  Widget _buildSearchBar() {
+  Widget _buildSearchAndFilter() {
     return Container(
       padding: const EdgeInsets.all(24),
       color: Colors.white,
-      child: TextField(
-        onChanged: (val) => setState(() {
-          _searchQuery = val;
-          _currentPage = 1;
-        }),
-        decoration: InputDecoration(
-          hintText: 'Search membership plans...',
-          prefixIcon: Icon(Icons.search, color: AppTheme.mutedTextColor),
-          suffixIcon: _searchQuery.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () => setState(() {
-                    _searchQuery = '';
-                    _currentPage = 1;
-                  }),
-                )
-              : null,
-          filled: true,
-          fillColor: AppTheme.backgroundColor,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: AppTheme.tableBorderColor),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              onChanged: (val) => setState(() {
+                _searchQuery = val;
+                _currentPage = 1;
+              }),
+              decoration: InputDecoration(
+                hintText: 'Search membership plans...',
+                prefixIcon: Icon(Icons.search, color: AppTheme.mutedTextColor),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () => setState(() {
+                          _searchQuery = '';
+                          _currentPage = 1;
+                        }),
+                      )
+                    : null,
+                filled: true,
+                fillColor: AppTheme.backgroundColor,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: AppTheme.tableBorderColor),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: AppTheme.tableBorderColor),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: AppTheme.primaryColor, width: 2),
+                ),
+              ),
+            ),
           ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: AppTheme.tableBorderColor),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: AppTheme.primaryColor, width: 2),
-          ),
-        ),
+          const SizedBox(width: 16),
+          _buildFilterButton(),
+        ],
       ),
     );
   }

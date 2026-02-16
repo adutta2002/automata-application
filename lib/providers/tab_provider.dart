@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum TabType { dashboard, serviceInvoice, productInvoice, advance, membership, invoiceDetails, invoices }
+enum TabType { dashboard, serviceInvoice, productInvoice, advance, membership, invoiceDetails, invoices, createInvoice }
 
 class TabItem {
   final String id;

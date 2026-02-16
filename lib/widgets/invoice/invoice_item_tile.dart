@@ -151,11 +151,15 @@ class _InvoiceItemTileState extends State<InvoiceItemTile> {
                   enabled: widget.isRateEditable,
                   controller: _rateCtrl,
                   focusNode: _rateFocus,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Rate',
                     isDense: true,
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.tableBorderColor)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.tableBorderColor)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.primaryColor, width: 2)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                   ),
                   keyboardType: TextInputType.number,
                   onChanged: widget.onRateChanged,

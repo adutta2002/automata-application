@@ -130,7 +130,15 @@ class _CustomerSelectorState extends State<CustomerSelector> {
               Expanded(
                 child: TextField(
                   controller: _emailCtrl,
-                  decoration: const InputDecoration(labelText: 'Email', isDense: true, border: OutlineInputBorder()),
+                  decoration: InputDecoration(
+                    labelText: 'Email',
+                    isDense: true,
+                    filled: true,
+                    fillColor: AppTheme.backgroundColor,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.tableBorderColor)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.tableBorderColor)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.primaryColor, width: 2)),
+                  ),
                   onChanged: (val) => _notifyChange(email: val),
                 ),
               ),
@@ -138,7 +146,15 @@ class _CustomerSelectorState extends State<CustomerSelector> {
               Expanded(
                 child: TextField(
                   controller: _addressCtrl,
-                  decoration: const InputDecoration(labelText: 'Address', isDense: true, border: OutlineInputBorder()),
+                  decoration: InputDecoration(
+                    labelText: 'Address',
+                    isDense: true,
+                    filled: true,
+                    fillColor: AppTheme.backgroundColor,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.tableBorderColor)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.tableBorderColor)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.primaryColor, width: 2)),
+                  ),
                   onChanged: (val) => _notifyChange(address: val),
                 ),
               ),
@@ -189,12 +205,17 @@ class _CustomerSelectorState extends State<CustomerSelector> {
           return TextField(
             controller: controller,
             focusNode: focusNode,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Name',
               hintText: 'Search or Enter Name',
               isDense: true,
-              border: OutlineInputBorder(),
-              suffixIcon: Icon(Icons.search, size: 16),
+              filled: true,
+              fillColor: AppTheme.backgroundColor,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.tableBorderColor)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.tableBorderColor)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.primaryColor, width: 2)),
+              suffixIcon: const Icon(Icons.search, size: 16),
             ),
             onChanged: (val) {
                _notifyChange(name: val);
@@ -250,12 +271,17 @@ class _CustomerSelectorState extends State<CustomerSelector> {
             controller: controller,
             focusNode: focusNode,
             keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Phone', 
               hintText: 'Search or Enter Phone',
-              isDense: true, 
-              border: OutlineInputBorder(),
-              suffixIcon: Icon(Icons.phone, size: 16),
+              isDense: true,
+              filled: true,
+              fillColor: AppTheme.backgroundColor,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.tableBorderColor)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.tableBorderColor)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.primaryColor, width: 2)),
+              suffixIcon: const Icon(Icons.phone, size: 16),
             ),
             onChanged: (val) {
                _notifyChange(phone: val);

@@ -68,6 +68,8 @@ class Customer {
       state: map['state'],
     );
   }
+
+  bool get isMember => membershipPlanId != null;
 }
 
 class Product {

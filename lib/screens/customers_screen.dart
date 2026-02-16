@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/pos_provider.dart';
 import '../models/pos_models.dart';
+import '../providers/pos_provider.dart';
 import '../core/app_theme.dart';
-import 'customer_form_screen.dart';
+import 'customer_form_screen.dart'; // Ensure you have this file
 import '../widgets/common/pagination_controls.dart';
 
 class CustomersScreen extends StatefulWidget {
@@ -15,12 +15,9 @@ class CustomersScreen extends StatefulWidget {
 
 class _CustomersScreenState extends State<CustomersScreen> {
   String _searchQuery = '';
-  // Filters
-  bool _filterHasEmail = false;
-  bool _filterHasPhone = false;
-
   int _currentPage = 1;
-  static const int _itemsPerPage = 4;
+  static const int _itemsPerPage = 10;
+  String _filterMembershipStatus = 'All'; // 'All', 'Member', 'Regular'
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +28,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         children: [
           _buildHeader(),
           _buildActiveFilters(),
-          _buildSearchBar(),
+          _buildSearchAndFilter(),
           Expanded(child: _buildCustomerTable()),
         ],
       ),
@@ -49,40 +46,70 @@ class _CustomersScreenState extends State<CustomersScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           const Text(
-            'Customer List',
+            'Customer Management',
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
               color: AppTheme.textColor,
             ),
           ),
-          Row(
-            children: [
-              _buildFilterButton(),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: () => showDialog(
-                  context: context,
-                  builder: (context) => const CustomerFormDialog(),
+          _buildAddCustomerButton(),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildSearchAndFilter() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      color: Colors.white,
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              onChanged: (val) => setState(() {
+                _searchQuery = val;
+                _currentPage = 1; // Reset to page 1 on search
+              }),
+              decoration: InputDecoration(
+                hintText: 'Search by name, phone, or email...',
+                prefixIcon: Icon(Icons.search, color: AppTheme.mutedTextColor),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () => setState(() {
+                          _searchQuery = '';
+                          _currentPage = 1;
+                        }),
+                      )
+                    : null,
+                filled: true,
+                fillColor: AppTheme.backgroundColor,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: AppTheme.tableBorderColor),
                 ),
-                icon: const Icon(Icons.person_add_alt_1, size: 18),
-                label: const Text('Add Customer'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  elevation: 0,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: AppTheme.tableBorderColor),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: AppTheme.primaryColor, width: 2),
                 ),
               ),
-            ],
+            ),
           ),
+          const SizedBox(width: 16),
+          _buildFilterButton(),
         ],
       ),
     );
   }
 
   Widget _buildFilterButton() {
-    return OutlinedButton.icon(
+     return OutlinedButton.icon(
       onPressed: _showFilterDialog,
       icon: const Icon(Icons.filter_list, size: 18),
       label: const Text('Filter'),
@@ -95,51 +122,51 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   void _showFilterDialog() {
-    // Temp state
-    bool tempEmail = _filterHasEmail;
-    bool tempPhone = _filterHasPhone;
+    String tempStatus = _filterMembershipStatus;
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Text('Filter Customers'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CheckboxListTile(
-                title: const Text('Has Email'),
-                value: tempEmail,
-                onChanged: (val) => setState(() => tempEmail = val!),
-              ),
-              CheckboxListTile(
-                title: const Text('Has Phone Number'),
-                value: tempPhone,
-                onChanged: (val) => setState(() => tempPhone = val!),
-              ),
-            ],
+          content: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Membership Status', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: tempStatus,
+                  decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12)),
+                  items: const [
+                    DropdownMenuItem(value: 'All', child: Text('All')),
+                    DropdownMenuItem(value: 'Member', child: Text('Member')),
+                    DropdownMenuItem(value: 'Regular', child: Text('Regular')),
+                  ],
+                  onChanged: (val) => setState(() => tempStatus = val!),
+                ),
+              ],
+            ),
           ),
-           actions: [
+          actions: [
             TextButton(
               onPressed: () {
-                setState(() {
-                  tempEmail = false;
-                  tempPhone = false;
-                });
+                 setState(() => tempStatus = 'All');
               },
               child: const Text('Reset'),
             ),
             ElevatedButton(
               onPressed: () {
-                // Apply changes to the main widget state
                 this.setState(() {
-                  _filterHasEmail = tempEmail;
-                  _filterHasPhone = tempPhone;
-                  _currentPage = 1; 
+                  _filterMembershipStatus = tempStatus;
+                  _currentPage = 1;
                 });
                 Navigator.pop(context);
               },
-               style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, foregroundColor: Colors.white),
               child: const Text('Apply'),
             ),
           ],
@@ -151,17 +178,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
   Widget _buildActiveFilters() {
     final filters = <Widget>[];
 
-    if (_filterHasEmail) {
+    if (_filterMembershipStatus != 'All') {
       filters.add(_buildFilterChip(
-        label: 'Has Email',
-        onDeleted: () => setState(() { _filterHasEmail = false; _currentPage = 1; }),
-      ));
-    }
-
-    if (_filterHasPhone) {
-      filters.add(_buildFilterChip(
-        label: 'Has Phone',
-        onDeleted: () => setState(() { _filterHasPhone = false; _currentPage = 1; }),
+        label: 'Status: $_filterMembershipStatus',
+        onDeleted: () => setState(() { _filterMembershipStatus = 'All'; _currentPage = 1; }),
       ));
     }
 
@@ -187,12 +207,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
             ),
           ),
           ...filters,
-          if (filters.isNotEmpty)
              TextButton(
                onPressed: () {
                  setState(() {
-                   _filterHasEmail = false;
-                   _filterHasPhone = false;
+                   _filterMembershipStatus = 'All';
                    _currentPage = 1;
                  });
                },
@@ -214,7 +232,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
       label: Text(label, style: const TextStyle(fontSize: 12)),
       deleteIcon: const Icon(Icons.close, size: 16),
       onDeleted: onDeleted,
-      backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+      backgroundColor: AppTheme.primaryColor.withAlpha(26),
       labelStyle: TextStyle(color: AppTheme.primaryColor),
       side: BorderSide.none,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
@@ -222,44 +240,23 @@ class _CustomersScreenState extends State<CustomersScreen> {
       visualDensity: VisualDensity.compact,
     );
   }
-
-  Widget _buildSearchBar() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      color: Colors.white,
-      child: TextField(
-        onChanged: (val) => setState(() {
-          _searchQuery = val;
-          _currentPage = 1;
-        }),
-        decoration: InputDecoration(
-          hintText: 'Search customers by name, phone or email...',
-          prefixIcon: Icon(Icons.search, color: AppTheme.mutedTextColor),
-          suffixIcon: _searchQuery.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () => setState(() {
-                    _searchQuery = '';
-                    _currentPage = 1;
-                  }),
-                )
-              : null,
-          filled: true,
-          fillColor: AppTheme.backgroundColor,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: AppTheme.tableBorderColor),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: AppTheme.tableBorderColor),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: AppTheme.primaryColor, width: 2),
-          ),
-        ),
+  
+  Widget _buildAddCustomerButton() {
+    return ElevatedButton.icon(
+      onPressed: () => showDialog(
+        context: context,
+        builder: (context) => const CustomerFormDialog(),
+      ),
+      icon: const Icon(Icons.add, size: 18),
+      label: const Text('Add Customer'),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppTheme.primaryColor,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        elevation: 2,
+        shadowColor: AppTheme.primaryColor.withAlpha(77),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        textStyle: const TextStyle(fontWeight: FontWeight.bold),
       ),
     );
   }
@@ -267,16 +264,20 @@ class _CustomersScreenState extends State<CustomersScreen> {
   Widget _buildCustomerTable() {
     return Consumer<POSProvider>(
       builder: (context, provider, child) {
-        // 1. Filter
-        final filteredCustomers = provider.customers.where((c) {
-          final matchesSearch = c.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                 c.phone.contains(_searchQuery) ||
-                 c.email.toLowerCase().contains(_searchQuery.toLowerCase());
+        final filteredCustomers = provider.customers.where((customer) {
+          final query = _searchQuery.toLowerCase();
+          final matchesQuery = customer.name.toLowerCase().contains(query) ||
+                 customer.phone.contains(query) ||
+                 (customer.email?.toLowerCase().contains(query) ?? false);
           
-          final matchesEmail = !_filterHasEmail || c.email.isNotEmpty;
-          final matchesPhone = !_filterHasPhone || c.phone.isNotEmpty;
+          bool matchesMembership = true;
+          if (_filterMembershipStatus != 'All') {
+            final isMember = customer.isMember;
+            if (_filterMembershipStatus == 'Member') matchesMembership = isMember;
+            else matchesMembership = !isMember;
+          }
 
-          return matchesSearch && matchesEmail && matchesPhone;
+          return matchesQuery && matchesMembership;
         }).toList();
 
         if (filteredCustomers.isEmpty) {
@@ -295,10 +296,16 @@ class _CustomersScreenState extends State<CustomersScreen> {
           );
         }
 
-        // 2. Paginate
         final startIndex = (_currentPage - 1) * _itemsPerPage;
-        final endIndex = (startIndex + _itemsPerPage < filteredCustomers.length) 
-            ? startIndex + _itemsPerPage 
+        if (startIndex >= filteredCustomers.length && _currentPage > 1) {
+             WidgetsBinding.instance.addPostFrameCallback((_) {
+                setState(() => _currentPage = 1);
+             });
+             return const SizedBox.shrink();
+        }
+
+        final endIndex = (startIndex + _itemsPerPage < filteredCustomers.length)
+            ? startIndex + _itemsPerPage
             : filteredCustomers.length;
             
         final paginatedCustomers = filteredCustomers.sublist(startIndex, endIndex);
@@ -311,7 +318,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
             border: Border.all(color: AppTheme.tableBorderColor),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withAlpha(13),
                 blurRadius: 10,
                 offset: const Offset(0, 2),
               ),
@@ -323,17 +330,14 @@ class _CustomersScreenState extends State<CustomersScreen> {
               Expanded(
                 child: ListView.separated(
                   itemCount: paginatedCustomers.length,
-                  separatorBuilder: (context, index) => Divider(
-                    height: 1,
-                    color: AppTheme.tableBorderColor,
-                  ),
+                  separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.tableBorderColor),
                   itemBuilder: (context, index) {
                     final customer = paginatedCustomers[index];
                     return _buildTableRow(customer, index);
                   },
                 ),
               ),
-              PaginationControls(
+               PaginationControls(
                 currentPage: _currentPage,
                 totalItems: filteredCustomers.length,
                 itemsPerPage: _itemsPerPage,
@@ -358,188 +362,140 @@ class _CustomersScreenState extends State<CustomersScreen> {
       ),
       child: Row(
         children: [
-          const Expanded(
-            flex: 3,
-            child: Text(
-              'Customer',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-                color: AppTheme.textColor,
-                letterSpacing: 0.5,
-              ),
-            ),
-          ),
-          const Expanded(
-            flex: 2,
-            child: Text(
-              'Phone',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-                color: AppTheme.textColor,
-                letterSpacing: 0.5,
-              ),
-            ),
-          ),
-          const Expanded(
-            flex: 2,
-            child: Text(
-              'Email',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-                color: AppTheme.textColor,
-                letterSpacing: 0.5,
-              ),
-            ),
-          ),
-          const Expanded(
-            flex: 2,
-            child: Text(
-              'Address',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-                color: AppTheme.textColor,
-                letterSpacing: 0.5,
-              ),
-            ),
-          ),
-          const SizedBox(
-            width: 80,
-            child: Text(
-              'Actions',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-                color: AppTheme.textColor,
-                letterSpacing: 0.5,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
+          const Expanded(flex: 2, child: Text('Name', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: AppTheme.textColor))),
+          const Expanded(flex: 2, child: Text('Phone', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: AppTheme.textColor))),
+          const Expanded(flex: 2, child: Text('Email', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: AppTheme.textColor))),
+          const Expanded(flex: 2, child: Text('Address', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: AppTheme.textColor))),
+          const SizedBox(width: 100, child: Text('Actions', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: AppTheme.textColor), textAlign: TextAlign.center)),
         ],
       ),
     );
   }
 
   Widget _buildTableRow(Customer customer, int index) {
-    final colors = [
-      Colors.blue,
-      Colors.green,
-      Colors.orange,
-      Colors.purple,
-      Colors.pink,
-      Colors.teal,
-      Colors.indigo,
-    ];
-    final color = colors[customer.name.hashCode % colors.length];
-
     return Material(
       color: index.isEven ? AppTheme.tableRowEvenColor : AppTheme.tableRowOddColor,
       child: InkWell(
-        hoverColor: AppTheme.tableHoverColor,
         onTap: () => showDialog(
           context: context,
           builder: (context) => CustomerFormDialog(customer: customer),
         ),
+        hoverColor: AppTheme.tableHoverColor,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           child: Row(
             children: [
-              // Customer with avatar
               Expanded(
-                flex: 3,
+                flex: 2,
                 child: Row(
                   children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: color.shade100,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: color.shade200, width: 2),
-                      ),
-                      child: Center(
-                        child: Text(
-                          customer.name[0].toUpperCase(),
-                          style: TextStyle(
-                            color: color.shade700,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                    ),
+                    _buildCustomerAvatar(customer),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         customer.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          color: AppTheme.textColor,
-                        ),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.textColor),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
                 ),
               ),
-              // Phone
               Expanded(
                 flex: 2,
                 child: Text(
                   customer.phone,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppTheme.mutedTextColor,
-                  ),
+                  style: const TextStyle(fontSize: 13, color: AppTheme.mutedTextColor),
                 ),
               ),
-              // Email
               Expanded(
                 flex: 2,
                 child: Text(
-                  customer.email.isEmpty ? '-' : customer.email,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppTheme.mutedTextColor,
-                  ),
+                  customer.email ?? '-',
+                  style: const TextStyle(fontSize: 13, color: AppTheme.mutedTextColor),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              // Address
               Expanded(
                 flex: 2,
                 child: Text(
-                  customer.address.isEmpty ? '-' : customer.address,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppTheme.mutedTextColor,
-                  ),
+                  customer.address ?? '-',
+                  style: const TextStyle(fontSize: 13, color: AppTheme.mutedTextColor),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              // Actions
               SizedBox(
-                width: 80,
-                child: Center(
-                  child: IconButton(
-                    icon: const Icon(Icons.edit_outlined, size: 18),
-                    color: Colors.blue,
-                    onPressed: () => showDialog(
-                      context: context,
-                      builder: (context) => CustomerFormDialog(customer: customer),
+                width: 100,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      color: Colors.blue,
+                      onPressed: () => showDialog(
+                        context: context,
+                        builder: (context) => CustomerFormDialog(customer: customer),
+                      ),
+                      tooltip: 'Edit',
                     ),
-                    tooltip: 'Edit',
-                  ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      color: Colors.red,
+                      onPressed: () => _confirmDelete(context, customer),
+                      tooltip: 'Delete',
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildCustomerAvatar(Customer customer) {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: Colors.purple.shade50,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.purple.shade200),
+      ),
+      child: Center(
+        child: Text(
+          customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?',
+          style: TextStyle(
+            color: Colors.purple.shade700,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, Customer customer) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Delete'),
+        content: Text('Are you sure you want to delete customer "${customer.name}"?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              await context.read<POSProvider>().deleteCustomer(customer.id!);
+              if (context.mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Customer "${customer.name}" deleted')));
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: const Text('Delete'),
+          ),
+        ],
       ),
     );
   }

@@ -20,7 +20,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
   RangeValues? _priceRange;
   
   int _currentPage = 1;
-  static const int _itemsPerPage = 4;
+  static const int _itemsPerPage = 10; // Updated to match Invoice Screen default
 
   @override
   Widget build(BuildContext context) {
@@ -56,13 +56,56 @@ class _InventoryScreenState extends State<InventoryScreen> {
               color: AppTheme.textColor,
             ),
           ),
-          Row(
-            children: [
-              _buildFilterButton(),
-              const SizedBox(width: 12),
-              _buildAddProductButton(),
-            ],
+          _buildAddProductButton(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchAndFilter() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      color: Colors.white,
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              onChanged: (val) => setState(() {
+                _searchQuery = val;
+                _currentPage = 1; // Reset to page 1 on search
+              }),
+              decoration: InputDecoration(
+                hintText: 'Search products by name o code...',
+                prefixIcon: Icon(Icons.search, color: AppTheme.mutedTextColor),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () => setState(() {
+                          _searchQuery = '';
+                          _currentPage = 1;
+                        }),
+                      )
+                    : null,
+                filled: true,
+                fillColor: AppTheme.backgroundColor,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: AppTheme.tableBorderColor),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: AppTheme.tableBorderColor),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: AppTheme.primaryColor, width: 2),
+                ),
+              ),
+            ),
           ),
+          const SizedBox(width: 16),
+          _buildFilterButton(),
         ],
       ),
     );
@@ -101,57 +144,66 @@ class _InventoryScreenState extends State<InventoryScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Text('Filter Products'),
           content: SizedBox(
             width: 400,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Category', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: categories.contains(tempCategory) ? tempCategory : 'All',
-                  decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12)),
-                  items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                  onChanged: (val) => setState(() => tempCategory = val!),
-                ),
-                const SizedBox(height: 16),
-                const Text('Stock Status', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: tempStock,
-                  decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12)),
-                  items: const [
-                    DropdownMenuItem(value: 'All', child: Text('All')),
-                    DropdownMenuItem(value: 'Low Stock', child: Text('Low Stock (<10)')),
-                    DropdownMenuItem(value: 'In Stock', child: Text('In Stock')),
-                  ],
-                  onChanged: (val) => setState(() => tempStock = val!),
-                ),
-                const SizedBox(height: 16),
-                const Text('Price Range', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Text('₹${tempPrice.start.toInt()}'),
-                    Expanded(
-                      child: RangeSlider(
-                        values: tempPrice,
-                        min: 0,
-                        max: maxPrice,
-                        divisions: 100,
-                        labels: RangeLabels(
-                          '₹${tempPrice.start.toInt()}', 
-                          '₹${tempPrice.end.toInt()}'
-                        ),
-                        onChanged: (values) => setState(() => tempPrice = values),
-                      ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Category', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: categories.contains(tempCategory) ? tempCategory : 'All',
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), 
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12)
                     ),
-                    Text('₹${tempPrice.end.toInt()}'),
-                  ],
-                ),
-              ],
+                    items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                    onChanged: (val) => setState(() => tempCategory = val!),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Stock Status', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: tempStock,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), 
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12)
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'All', child: Text('All')),
+                      DropdownMenuItem(value: 'Low Stock', child: Text('Low Stock (<10)')),
+                      DropdownMenuItem(value: 'In Stock', child: Text('In Stock')),
+                    ],
+                    onChanged: (val) => setState(() => tempStock = val!),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Price Range', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Text('₹${tempPrice.start.toInt()}'),
+                      Expanded(
+                        child: RangeSlider(
+                          values: tempPrice,
+                          min: 0,
+                          max: maxPrice,
+                          divisions: 100,
+                          labels: RangeLabels(
+                            '₹${tempPrice.start.toInt()}', 
+                            '₹${tempPrice.end.toInt()}'
+                          ),
+                          onChanged: (values) => setState(() => tempPrice = values),
+                        ),
+                      ),
+                      Text('₹${tempPrice.end.toInt()}'),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
@@ -203,10 +255,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
     }
 
     if (_priceRange != null) {
-      // Check if range is actually filtering (not 0 to max)
-      // Actually we don't easily know max here without recalculating, 
-      // but showing it if set is fine. We'll simplify and just show if it was set via dialog.
-      // Or we can check if it's different from default, but let's just show it.
       filters.add(_buildFilterChip(
         label: 'Price: ₹${_priceRange!.start.toInt()} - ₹${_priceRange!.end.toInt()}',
         onDeleted: () => setState(() { _priceRange = null; _currentPage = 1; }),
@@ -263,7 +311,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       label: Text(label, style: const TextStyle(fontSize: 12)),
       deleteIcon: const Icon(Icons.close, size: 16),
       onDeleted: onDeleted,
-      backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+      backgroundColor: AppTheme.primaryColor.withAlpha(26),
       labelStyle: TextStyle(color: AppTheme.primaryColor),
       side: BorderSide.none,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
@@ -284,55 +332,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
       style: ElevatedButton.styleFrom(
         backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        elevation: 0,
-      ),
-    );
-  }
-
-  Widget _buildSearchAndFilter() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      color: Colors.white,
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              onChanged: (val) => setState(() {
-                _searchQuery = val;
-                _currentPage = 1; // Reset to page 1 on search
-              }),
-              decoration: InputDecoration(
-                hintText: 'Search products...',
-                prefixIcon: Icon(Icons.search, color: AppTheme.mutedTextColor),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () => setState(() {
-                          _searchQuery = '';
-                          _currentPage = 1;
-                        }),
-                      )
-                    : null,
-                filled: true,
-                fillColor: AppTheme.backgroundColor,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: AppTheme.tableBorderColor),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: AppTheme.tableBorderColor),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: AppTheme.primaryColor, width: 2),
-                ),
-              ),
-            ),
-          ),
-        ],
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        elevation: 2,
+        shadowColor: AppTheme.primaryColor.withAlpha(77),
+         shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        textStyle: const TextStyle(fontWeight: FontWeight.bold),
       ),
     );
   }
@@ -377,6 +383,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
         // 2. Paginate
         final startIndex = (_currentPage - 1) * _itemsPerPage;
+        if (startIndex >= filteredProducts.length && _currentPage > 1) {
+             WidgetsBinding.instance.addPostFrameCallback((_) {
+                setState(() => _currentPage = 1);
+             });
+             return const SizedBox.shrink();
+        }
+
         final endIndex = (startIndex + _itemsPerPage < filteredProducts.length) 
             ? startIndex + _itemsPerPage 
             : filteredProducts.length;
@@ -391,7 +404,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
             border: Border.all(color: AppTheme.tableBorderColor),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withAlpha(13),
                 blurRadius: 10,
                 offset: const Offset(0, 2),
               ),
@@ -592,7 +605,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withOpacity(0.1),
+                    color: AppTheme.primaryColor.withAlpha(26),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -752,3 +765,4 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
 }
+

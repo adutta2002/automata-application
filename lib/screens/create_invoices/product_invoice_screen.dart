@@ -9,7 +9,6 @@ import '../../core/app_theme.dart';
 import '../../widgets/invoice/customer_selector.dart';
 import '../../widgets/invoice/invoice_summary_pane.dart';
 import '../../widgets/invoice/invoice_item_tile.dart';
-import '../invoices_screen.dart';
 import '../invoice_details_screen.dart';
 
 class ProductInvoiceScreen extends StatefulWidget {
@@ -306,7 +305,7 @@ class _ProductInvoiceScreenState extends State<ProductInvoiceScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300),
+          border: Border.all(color: AppTheme.tableBorderColor),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
@@ -331,8 +330,8 @@ class _ProductInvoiceScreenState extends State<ProductInvoiceScreen> {
           if (widget.tabId != null)
              TextButton.icon(
               onPressed: () => context.read<TabProvider>().removeTab(widget.tabId!),
-              icon: const Icon(Icons.close, color: Colors.black87),
-              label: const Text('Close Tab', style: TextStyle(color: Colors.black87)),
+              icon: const Icon(Icons.close, color: AppTheme.textColor),
+              label: const Text('Close Tab', style: TextStyle(color: AppTheme.textColor)),
             ),
           if (_items.isNotEmpty || _selectedCustomer != null)
             TextButton.icon(
@@ -351,32 +350,58 @@ class _ProductInvoiceScreenState extends State<ProductInvoiceScreen> {
                 children: [
                   Expanded(
                     flex: 2,
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
+                    child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              _buildBillTypeSelector(),
-                              _buildDateSelector(),
-                            ],
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(32, 32, 32, 0),
+                            child: Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppTheme.tableBorderColor),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      _buildBillTypeSelector(),
+                                      _buildDateSelector(),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 24),
+                                  CustomerSelector(
+                                    selectedCustomer: _selectedCustomer,
+                                    customers: context.watch<POSProvider>().customers,
+                                    onSelected: (c) {
+                                      setState(() => _selectedCustomer = c);
+                                      _checkMembership(c);
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                          const SizedBox(height: 16),
-                          CustomerSelector(
-                            selectedCustomer: _selectedCustomer,
-                            customers: context.watch<POSProvider>().customers,
-                            onSelected: (c) {
-                              setState(() => _selectedCustomer = c);
-                              _checkMembership(c);
-                            },
+                          const SizedBox(height: 24),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(32, 0, 32, 32),
+                              child: Container(
+                                padding: const EdgeInsets.all(24),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: AppTheme.tableBorderColor),
+                                ),
+                                child: _buildItemsSection(isScrollable: false),
+                              ),
+                            ),
                           ),
-                          const SizedBox(height: 32),
-                          _buildItemsSection(),
                         ],
                       ),
-                    ),
                   ),
                   const VerticalDivider(width: 1),
                   Container(
@@ -414,7 +439,7 @@ class _ProductInvoiceScreenState extends State<ProductInvoiceScreen> {
                       ],
                     ),
                     const SizedBox(height: 24),
-                    _buildItemsSection(),
+                    _buildItemsSection(isScrollable: true),
                     const SizedBox(height: 24),
                     const Divider(),
                     _buildSummaryPane(),
@@ -444,6 +469,19 @@ class _ProductInvoiceScreenState extends State<ProductInvoiceScreen> {
       style: ButtonStyle(
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         visualDensity: VisualDensity.compact,
+        backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+          if (states.contains(WidgetState.selected)) {
+            return AppTheme.primaryColor.withOpacity(0.1); 
+          }
+          return Colors.transparent; 
+        }),
+        foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+          if (states.contains(WidgetState.selected)) {
+            return AppTheme.primaryColor;
+          }
+          return AppTheme.mutedTextColor;
+        }),
+        side: WidgetStateProperty.all(BorderSide(color: AppTheme.tableBorderColor)),
       ),
     );
   }
@@ -497,7 +535,7 @@ class _ProductInvoiceScreenState extends State<ProductInvoiceScreen> {
     );
   }
 
-  Widget _buildItemsSection() {
+  Widget _buildItemsSection({required bool isScrollable}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -511,9 +549,14 @@ class _ProductInvoiceScreenState extends State<ProductInvoiceScreen> {
                 const SizedBox(width: 16),
                 ElevatedButton.icon(
                   onPressed: _showProductSelectionDialog,
-                  icon: const Icon(Icons.add),
+                  icon: const Icon(Icons.add, size: 18),
                   label: const Text('Add Product'),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade50, foregroundColor: Colors.green),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor, 
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
                 ),
               ],
             ),
@@ -521,15 +564,25 @@ class _ProductInvoiceScreenState extends State<ProductInvoiceScreen> {
         ),
         const SizedBox(height: 16),
         if (_items.isEmpty)
-          _buildEmptyState()
+           isScrollable 
+             ? _buildEmptyState() 
+             : Expanded(child: _buildEmptyState())
         else
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _items.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) => _buildItemTile(index),
-          ),
+          isScrollable
+            ? ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _items.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) => _buildItemTile(index),
+              )
+            : Expanded(
+                child: ListView.separated(
+                  itemCount: _items.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) => _buildItemTile(index),
+                ),
+              ),
       ],
     );
   }
@@ -542,7 +595,7 @@ class _ProductInvoiceScreenState extends State<ProductInvoiceScreen> {
       decoration: BoxDecoration(
         color: Colors.grey.shade50,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: AppTheme.tableBorderColor),
       ),
       child: Center(
         child: Column(
@@ -595,7 +648,16 @@ class _ProductInvoiceScreenState extends State<ProductInvoiceScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextField(
-                      decoration: const InputDecoration(hintText: 'Search by name or SKU...', prefixIcon: Icon(Icons.search)),
+                      decoration: InputDecoration(
+                        hintText: 'Search by name or SKU...',
+                        prefixIcon: Icon(Icons.search, color: AppTheme.mutedTextColor),
+                        filled: true,
+                        fillColor: AppTheme.backgroundColor,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.tableBorderColor)),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.tableBorderColor)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.primaryColor, width: 2)),
+                      ),
                       onChanged: (val) => setDialogState(() => query = val),
                     ),
                     const SizedBox(height: 16),
